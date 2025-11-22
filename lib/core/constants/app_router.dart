@@ -19,6 +19,11 @@ import '../../features/scope/presentation/pages/send_page.dart';
 import '../../features/scope/presentation/pages/scan_page.dart';
 import '../../features/market/presentation/pages/market_page.dart';
 import '../../features/chat/presentation/pages/chat_page.dart';
+import '../../features/settings/presentation/pages/privacy_page.dart';
+import '../../features/settings/presentation/pages/policy_page.dart';
+import '../../features/settings/presentation/pages/terms_page.dart';
+import '../../features/settings/presentation/pages/help_page.dart';
+import '../../features/settings/presentation/pages/language_page.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -95,6 +100,26 @@ class AppRouter {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: '/privacy',
+        builder: (context, state) => const PrivacyPage(),
+      ),
+      GoRoute(
+        path: '/policy',
+        builder: (context, state) => const PolicyPage(),
+      ),
+      GoRoute(
+        path: '/terms',
+        builder: (context, state) => const TermsPage(),
+      ),
+      GoRoute(
+        path: '/help',
+        builder: (context, state) => const HelpPage(),
+      ),
+      GoRoute(
+        path: '/language',
+        builder: (context, state) => const LanguagePage(),
       ),
     ],
   );
