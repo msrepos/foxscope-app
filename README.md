@@ -1,4 +1,4 @@
-# FoxScope Flutter Project
+# 🦊 FoxScope Flutter Project
 
 This document provides an overview of the FoxScope Flutter application structure, architecture, and development guidelines.
 
