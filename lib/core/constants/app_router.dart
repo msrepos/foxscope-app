@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:foxscope/core/widgets/map.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/onboarding/presentation/pages/splash_page.dart';
@@ -62,7 +63,10 @@ class AppRouter {
       ),
       GoRoute(
         path: '/scope-create',
-        builder: (context, state) => const CreateScopePage(),
+        builder: (context, state) {
+          final selectedLocation = state.extra as GeoLocation; //must pass this value
+          return CreateScopePage(selectedLocation: selectedLocation);
+        },
       ),
       GoRoute(
         path: '/scope-map',

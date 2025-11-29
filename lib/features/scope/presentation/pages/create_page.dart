@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:foxscope/core/widgets/map.dart';
+import 'package:foxscope/features/scope/presentation/pages/map_page.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,15 +13,29 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/constants/app_env.dart';
 
 class CreateScopePage extends StatefulWidget {
-  const CreateScopePage({super.key});
+  final GeoLocation selectedLocation;
+
+  const CreateScopePage({
+    required this.selectedLocation,
+    super.key,
+  });
 
   @override
   State<CreateScopePage> createState() => _CreateScopePageState();
 }
 
 class _CreateScopePageState extends State<CreateScopePage> {
+  late GeoLocation selectedLocation;
+  final GlobalKey<MapWidgetState> _mapKey = GlobalKey<MapWidgetState>();
+
   final TextEditingController _nameController = TextEditingController();
   File? _selectedImage;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedLocation = widget.selectedLocation;
+  }
 
   Future<void> pickImage() async {
     final picker = ImagePicker();
@@ -97,28 +114,40 @@ class _CreateScopePageState extends State<CreateScopePage> {
 
   @override
   Widget build(BuildContext context) {
+    final mapHeight = 200.0;
+
     return Scaffold(
       appBar: const AppHeader(title: "Create Scope"),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-
             // -----------------------------
             // 🌍 TOP MAP (KEPT EXACTLY AS YOU WANT)
             // -----------------------------
             Stack(
               children: [
                 Container(
-                  height: 200,
+                  height: mapHeight,
                   width: double.infinity,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    image: const DecorationImage(
+                    /*image: const DecorationImage(
                       image: AssetImage('assets/images/maps.png'),
                       fit: BoxFit.cover,
+                    ),*/
+                  ),
+                  child: MapWidget(
+                    key: _mapKey,
+                    height: mapHeight,
+                    enablePinDropping: false,
+                    initialPinLocation: LatLng(
+                      selectedLocation.lat!.toDouble(),
+                      selectedLocation.lng!.toDouble(),
                     ),
+                    //
+                    showCurrentLocationButton: false,
+                    autoMoveToCurrentLocation: false,
                   ),
                 ),
                 Positioned(
@@ -132,7 +161,17 @@ class _CreateScopePageState extends State<CreateScopePage> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    onPressed: () => context.go('/scope-map'),
+                    //onPressed: () => context.go('/scope-map'),
+                    onPressed: () {
+                      Navigator.push(context,
+                          MaterialPageRoute(builder: (context) {
+                        return MapScopePage(
+                          onLocationSelected: (location) => setState(() {
+                            selectedLocation = location;
+                          }),
+                        );
+                      }));
+                    },
                     child: const Text("Change"),
                   ),
                 ),
@@ -163,7 +202,8 @@ class _CreateScopePageState extends State<CreateScopePage> {
                           ),
                         ),
                         onPressed: () {},
-                        child: const Text("Free", style: TextStyle(color: Colors.white)),
+                        child: const Text("Free",
+                            style: TextStyle(color: Colors.white)),
                       ),
                     ),
                   ),
@@ -207,7 +247,8 @@ class _CreateScopePageState extends State<CreateScopePage> {
                             fit: BoxFit.cover,
                           )
                         : const DecorationImage(
-                            image: AssetImage('assets/images/default-scope.png'),
+                            image:
+                                AssetImage('assets/images/default-scope.png'),
                             fit: BoxFit.cover,
                           ),
                   ),
@@ -269,7 +310,6 @@ class _CreateScopePageState extends State<CreateScopePage> {
           ],
         ),
       ),
-
       bottomNavigationBar: const AppFooter(currentIndex: 1),
     );
   }

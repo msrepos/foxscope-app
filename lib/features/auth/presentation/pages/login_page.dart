@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:foxscope/core/utils/account_storage.dart';
+import 'package:foxscope/features/auth/data/models/user.dart';
+import 'package:foxscope/features/auth/data/repositories/auth_repository.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -22,53 +25,31 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> login() async {
     setState(() => isLoading = true);
 
-    final url = Uri.parse("${AppEnv.apiBaseUrl}/login");
+    final user = await AuthRepository().login(
+      username: emailController.text.trim(),
+      password: passwordController.text.trim(),
+    );
 
-    try {
-      final response = await http.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "email": emailController.text.trim(),
-          "password": passwordController.text.trim(),
-        }),
-      );
+    if (mounted) {
+      if (user.result != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Login Successful"),
+            backgroundColor: Colors.green,
+          ),
+        );
 
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data["token"] != null) {
-        final token = data["token"];
-        final userId = data["user"]["id"];
-
-        final prefs = await SharedPreferences.getInstance();
-        prefs.setString('user_name', data['user']['name']);
-        prefs.setString('token', token);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Login Successful"),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          context.go('/home', extra: userId);
-        }
-      } else {
+        context.go('/home', extra: user.result?.userId);
+      }
+      //
+      else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(data["message"] ?? "Login failed"),
+            content: Text(user.message?.get(true) ?? "Login failed"),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Error: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
 
     setState(() => isLoading = false);
@@ -88,7 +69,8 @@ class _LoginPageState extends State<LoginPage> {
             children: [
               IconButton(
                 onPressed: () => context.go('/onboarding'),
-                icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 28),
+                icon: const Icon(Icons.arrow_back,
+                    color: Colors.black87, size: 28),
               ),
 
               const SizedBox(height: 40),
@@ -115,7 +97,8 @@ class _LoginPageState extends State<LoginPage> {
                 controller: emailController,
                 decoration: InputDecoration(
                   labelText: 'Email Address',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -125,7 +108,8 @@ class _LoginPageState extends State<LoginPage> {
                 obscureText: true,
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6)),
                 ),
               ),
 

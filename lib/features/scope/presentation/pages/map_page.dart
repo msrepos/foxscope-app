@@ -1,24 +1,57 @@
 import 'package:flutter/material.dart';
+import 'package:foxscope/core/widgets/map.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/widgets/app_footer.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../../core/theme/app_colors.dart';
 
-class MapScopePage extends StatelessWidget {
-  const MapScopePage({super.key});
+class MapScopePage extends StatefulWidget {
+  final Function(GeoLocation)? onLocationSelected;
+
+  const MapScopePage({
+    this.onLocationSelected,
+    super.key,
+  });
+
+  @override
+  State<MapScopePage> createState() => _MapScopePageState();
+}
+
+class _MapScopePageState extends State<MapScopePage> {
+  final GlobalKey<MapWidgetState> _mapKey = GlobalKey<MapWidgetState>();
+  GeoLocation? _selectedLocation;
 
   @override
   Widget build(BuildContext context) {
+    var size = MediaQuery.of(context).size;
+
     return Scaffold(
       appBar: const AppHeader(title: "Confirm Scope Location"),
-
       body: Stack(
         children: [
           // Full-screen map placeholder image
-          Positioned.fill(
+          /*Positioned.fill(
             child: Image.asset(
               'assets/images/maps.png',
               fit: BoxFit.cover,
+            ),
+          ),*/
+          Positioned.fill(
+            child: MapWidget(
+              key: _mapKey,
+              height: size.height,
+              // * 1.3,
+              enablePinDropping: true,
+              controllersTopOffset: size.height - 380,
+              onPinDropped: (location) => setState(() {
+                _selectedLocation = location;
+              }),
+              //
+              showCurrentLocationButton: true,
+              autoMoveToCurrentLocation: true,
+              onFocusMovedToCurrentLocation: (lat, lng) => setState(() {
+                _selectedLocation = GeoLocation(lng: lng, lat: lat, name: null);
+              }),
             ),
           ),
 
@@ -70,14 +103,24 @@ class MapScopePage extends StatelessWidget {
               height: 45,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary, 
+                  backgroundColor: _selectedLocation == null
+                      ? AppColors.primary.withAlpha(100)
+                      : AppColors.primary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                onPressed: () {
-                  context.go('/scope-create');
-                },
+                onPressed: _selectedLocation == null
+                    ? null
+                    : () {
+                        if (widget.onLocationSelected == null) {
+                          context.go('/scope-create', extra: _selectedLocation);
+                        }
+                        //
+                        else {
+                          widget.onLocationSelected!(_selectedLocation!);
+                        }
+                      },
                 child: const Text(
                   "Confirm Location",
                   style: TextStyle(
@@ -91,7 +134,6 @@ class MapScopePage extends StatelessWidget {
           ),
         ],
       ),
-
       bottomNavigationBar: const AppFooter(currentIndex: 1),
     );
   }
