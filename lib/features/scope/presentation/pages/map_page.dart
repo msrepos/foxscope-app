@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:foxscope/core/widgets/map.dart';
+import 'package:foxscope/core/widgets/wait_spinner.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/widgets/app_footer.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -20,6 +22,7 @@ class MapScopePage extends StatefulWidget {
 class _MapScopePageState extends State<MapScopePage> {
   final GlobalKey<MapWidgetState> _mapKey = GlobalKey<MapWidgetState>();
   GeoLocation? _selectedLocation;
+  List<GeoLocation>? _foundLocations;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +78,7 @@ class _MapScopePageState extends State<MapScopePage> {
                 ],
               ),
               child: Row(
-                children: const [
+                children: [
                   Icon(Icons.search, color: Colors.grey),
                   SizedBox(width: 10),
                   Expanded(
@@ -86,12 +89,22 @@ class _MapScopePageState extends State<MapScopePage> {
                         hintStyle: TextStyle(color: Colors.grey, fontSize: 16),
                       ),
                       style: TextStyle(fontSize: 16),
+                      onChanged: onSearchTextChanged,
                     ),
                   ),
                 ],
               ),
             ),
           ),
+
+          // Search result
+          if (searchText.isNotEmpty && _foundLocations?.isNotEmpty == true)
+            Positioned(
+              top: 75,
+              left: 16,
+              right: 16,
+              child: searchResultListWidget(),
+            ),
 
           // Full-width button on bottom over map
           Positioned(
@@ -136,5 +149,98 @@ class _MapScopePageState extends State<MapScopePage> {
       ),
       bottomNavigationBar: const AppFooter(currentIndex: 1),
     );
+  }
+
+  Widget searchResultListWidget() {
+    final screenSize = MediaQuery.of(context).size;
+
+    return Container(
+      height: screenSize.height / 2 - 50,
+      width: screenSize.width,
+      //margin: EdgeInsets.only(left: 20, right: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(7),
+        boxShadow: [
+          BoxShadow(spreadRadius: 0.01, blurRadius: 0.01, offset: Offset(0, 1)),
+        ],
+      ),
+      child: ListView.builder(
+        itemCount: _foundLocations?.length ?? 0,
+        itemBuilder: (context, idx) => Padding(
+          padding:
+              const EdgeInsets.only(left: 10, right: 10, top: 5, bottom: 5),
+          child: TextButton(
+            onPressed: () => setState(() {
+              searchText = ""; //todo
+
+              var loc = _foundLocations![idx];
+              var position = LatLng(
+                loc.lat!.toDouble(),
+                loc.lng!.toDouble(),
+              );
+
+              _mapKey.currentState?.clearCustomMarkers();
+
+              _mapKey.currentState?.addCustomMarker(
+                markerId: loc.alterName,
+                position: position,
+                title: loc.name ?? loc.alterName,
+              );
+
+              _mapKey.currentState?.moveToLocation(position);
+            }),
+            style: ButtonStyle(
+              alignment: Alignment.centerLeft,
+            ),
+            child: Text(
+              _foundLocations![idx].name ?? _foundLocations![idx].alterName,
+              style:
+                  TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  //---------------------------------------------------------------------------
+
+  String searchText = "";
+  bool waitText = false;
+
+  void onSearchTextChanged(String value) {
+    searchText = value;
+    if (searchText.isEmpty) setState(() {});
+
+    if (!waitText) {
+      waitText = true;
+      Future.delayed(Duration(milliseconds: 800), () {
+        if (searchText.isNotEmpty) {
+          runSearchJob(searchText);
+        }
+
+        waitText = false;
+      });
+    }
+  }
+
+  void runSearchJob(String searchText) async {
+    //todo call api
+    debugPrint("$runtimeType.runSearchJob(searchText: $searchText)");
+
+    WaitSpinner.show(context, msg: "Find places...");
+
+    var response = await GooglePlacesApi()
+        .call(query: "$searchText + qatar + قطر"); //todo change query
+    if (!mounted) return;
+
+    await WaitSpinner.dismiss(context);
+
+    if (response.result?.isNotEmpty == true) {
+      setState(() {
+        _foundLocations = response.result;
+      });
+    }
   }
 }

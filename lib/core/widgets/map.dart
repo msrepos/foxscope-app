@@ -2,15 +2,20 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-
+import 'package:foxscope/core/utils/string_set.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
+import 'package:foxscope/core/utils/result.dart';
 import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+import '../utils/general_storage.dart';
+import '../utils/pairs.dart';
 
 ///https://pub.dev/packages/flutter_polyline_points
 
@@ -875,11 +880,13 @@ class GeoLocation {
   num? lng;
   num? lat;
   String? _name;
+  String? more;
 
   GeoLocation({
     required this.lng,
     required this.lat,
     required String? name,
+    this.more,
   }) : _name = name;
 
   GeoLocation.non();
@@ -890,9 +897,759 @@ class GeoLocation {
 
   @override
   String toString() {
-    return 'GeoLocation{lng: $lng, lat: $lat, name: $_name}';
+    return 'GeoLocation{lng: $lng, lat: $lat, name: $_name, more: $more}';
   }
 }
+
+///=============================================================================
+
+//region Google Places API
+/*https://developers.google.com/maps/documentation/places/web-service/text-search*/
+class GooglePlacesApi {
+  /*
+  "locationBias": {
+    "circle": {
+      "center": {"latitude": 37.7937, "longitude": -122.3965},
+      "radius": 500.0
+    }
+  }
+ */
+
+  Future<Result<List<GeoLocation>>> call({
+    //required String apiKey,
+    required String query,
+  }) async {
+    var url = Uri.parse('https://places.googleapis.com/v1/places:searchText');
+    
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": 'application/json',
+          'X-Goog-Api-Key': MapWidgetState._gak,
+          //'X-Goog-FieldMask': '*',
+          'X-Goog-FieldMask': 'places.id,places.name,'
+              'places.formattedAddress,places.googleMapsUri,places.location',
+        },
+        body: jsonEncode({"textQuery": query}),
+      );
+      
+      if (response.statusCode >= 200) {
+        final data = jsonDecode(response.body);
+        List<GeoLocation> lst = [];
+
+        data['places']?.forEach((place) {
+          var x = GeoLocation(
+            lng: place['location']['longitude'],
+            lat: place['location']['latitude'],
+            name: place['formattedAddress'],
+          );
+          lst.add(x);
+        });
+        
+        return Result(lst);
+      }
+      //
+      else {
+        return Result(
+          null,
+          message: StringSet("Can't retrieve data"),
+        );
+      }
+    } catch (e) {
+      return Result(null, message: StringSet("Error: $e"));
+    }
+  }
+}
+
+class GooglePlace {
+  final String? id;
+  final String? formattedAddress;
+
+  ///location: { "latitude":52.615201199999994, "longitude":4.7589657 }
+  final Pair<double, double>? latLng;
+  final String? googleMapsUri;
+
+  GooglePlace({
+    required this.id,
+    required this.formattedAddress,
+    required this.latLng,
+    required this.googleMapsUri,
+  });
+
+/*
+{
+  "places": [
+    {
+      "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw",
+      "id": "ChIJcaIlQLNXz0cRT4lPEGj4FPw",
+      "types": [
+        "point_of_interest",
+        "establishment"
+      ],
+      "nationalPhoneNumber": "072 527 9100",
+      "internationalPhoneNumber": "+31 72 527 9100",
+      "formattedAddress": "Robijnstraat 6, 1812 RB Alkmaar, Netherlands",
+      "addressComponents": [
+        {
+          "longText": "6",
+          "shortText": "6",
+          "types": [
+            "street_number"
+          ],
+          "languageCode": "en-US"
+        },
+        {
+          "longText": "Robijnstraat",
+          "shortText": "Robijnstraat",
+          "types": [
+            "route"
+          ],
+          "languageCode": "nl"
+        },
+        {
+          "longText": "Alkmaar",
+          "shortText": "Alkmaar",
+          "types": [
+            "locality",
+            "political"
+          ],
+          "languageCode": "nl"
+        },
+        {
+          "longText": "Alkmaar",
+          "shortText": "Alkmaar",
+          "types": [
+            "administrative_area_level_2",
+            "political"
+          ],
+          "languageCode": "nl"
+        },
+        {
+          "longText": "Noord-Holland",
+          "shortText": "NH",
+          "types": [
+            "administrative_area_level_1",
+            "political"
+          ],
+          "languageCode": "nl"
+        },
+        {
+          "longText": "Netherlands",
+          "shortText": "NL",
+          "types": [
+            "country",
+            "political"
+          ],
+          "languageCode": "en"
+        },
+        {
+          "longText": "1812 RB",
+          "shortText": "1812 RB",
+          "types": [
+            "postal_code"
+          ],
+          "languageCode": "en-US"
+        }
+      ],
+      "plusCode": {
+        "globalCode": "9F46JQ85+3H",
+        "compoundCode": "JQ85+3H Alkmaar, Netherlands"
+      },
+      "location": {
+        "latitude": 52.615201199999994,
+        "longitude": 4.7589657
+      },
+      "viewport": {
+        "low": {
+          "latitude": 52.613900319708506,
+          "longitude": 4.7576873197084986
+        },
+        "high": {
+          "latitude": 52.6165982802915,
+          "longitude": 4.7603852802915032
+        }
+      },
+      "rating": 4.6,
+      "googleMapsUri": "https://maps.google.com/?cid=18164416322925988175&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "websiteUri": "https://www.dokh.nl/",
+      "regularOpeningHours": {
+        "openNow": true,
+        "periods": [
+          {
+            "open": {
+              "day": 1,
+              "hour": 8,
+              "minute": 30
+            },
+            "close": {
+              "day": 1,
+              "hour": 16,
+              "minute": 30
+            }
+          },
+          {
+            "open": {
+              "day": 2,
+              "hour": 8,
+              "minute": 30
+            },
+            "close": {
+              "day": 2,
+              "hour": 16,
+              "minute": 30
+            }
+          },
+          {
+            "open": {
+              "day": 3,
+              "hour": 8,
+              "minute": 30
+            },
+            "close": {
+              "day": 3,
+              "hour": 16,
+              "minute": 30
+            }
+          },
+          {
+            "open": {
+              "day": 4,
+              "hour": 8,
+              "minute": 30
+            },
+            "close": {
+              "day": 4,
+              "hour": 16,
+              "minute": 30
+            }
+          },
+          {
+            "open": {
+              "day": 5,
+              "hour": 8,
+              "minute": 30
+            },
+            "close": {
+              "day": 5,
+              "hour": 16,
+              "minute": 30
+            }
+          }
+        ],
+        "weekdayDescriptions": [
+          "Monday: 8:30 AM – 4:30 PM",
+          "Tuesday: 8:30 AM – 4:30 PM",
+          "Wednesday: 8:30 AM – 4:30 PM",
+          "Thursday: 8:30 AM – 4:30 PM",
+          "Friday: 8:30 AM – 4:30 PM",
+          "Saturday: Closed",
+          "Sunday: Closed"
+        ],
+        "nextCloseTime": "2025-09-18T14:30:00Z"
+      },
+      "utcOffsetMinutes": 120,
+      "adrFormatAddress": "\u003cspan class=\"street-address\"\u003eRobijnstraat 6\u003c/span\u003e, \u003cspan class=\"postal-code\"\u003e1812 RB\u003c/span\u003e \u003cspan class=\"locality\"\u003eAlkmaar\u003c/span\u003e, \u003cspan class=\"country-name\"\u003eNetherlands\u003c/span\u003e",
+      "businessStatus": "OPERATIONAL",
+      "userRatingCount": 48,
+      "iconMaskBaseUri": "https://maps.gstatic.com/mapfiles/place_api/icons/v2/school_pinlet",
+      "iconBackgroundColor": "#7B9EB0",
+      "displayName": {
+        "text": "Stichting DOKh",
+        "languageCode": "nl"
+      },
+      "currentOpeningHours": {
+        "periods": [
+          {
+            "open": {
+              "day": 1,
+              "hour": 8,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 22
+              }
+            },
+            "close": {
+              "day": 1,
+              "hour": 16,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 22
+              }
+            }
+          },
+          {
+            "open": {
+              "day": 2,
+              "hour": 8,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 23
+              }
+            },
+            "close": {
+              "day": 2,
+              "hour": 16,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 23
+               }
+            }
+          },
+          {
+            "open": {
+              "day": 3,
+              "hour": 8,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 24
+              }
+            },
+            "close": {
+              "day": 3,
+              "hour": 16,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 24
+              }
+            }
+          },
+          {
+            "open": {
+              "day": 4,
+              "hour": 8,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 18
+              }
+            },
+            "close": {
+              "day": 4,
+              "hour": 16,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 18
+              }
+            }
+          },
+          {
+            "open": {
+              "day": 5,
+              "hour": 8,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 19
+              }
+            },
+            "close": {
+              "day": 5,
+              "hour": 16,
+              "minute": 30,
+              "date": {
+                "year": 2025,
+                "month": 9,
+                "day": 19
+              }
+            }
+          }
+        ],
+        "weekdayDescriptions": [
+          "Monday: 8:30 AM – 4:30 PM",
+          "Tuesday: 8:30 AM – 4:30 PM",
+          "Wednesday: 8:30 AM – 4:30 PM",
+          "Thursday: 8:30 AM – 4:30 PM",
+          "Friday: 8:30 AM – 4:30 PM",
+          "Saturday: Closed",
+          "Sunday: Closed"
+        ],
+        "nextCloseTime": "2025-09-18T14:30:00Z"
+      },
+      "shortFormattedAddress": "Robijnstraat 6","ews": [
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/reviews/ChZDSUhNMG9nS0VJQ0FnSUR0Mk5hbUN3EAE",
+          "relativePublishTimeDescription": "a year ago",
+          "rating": 5,
+          "text": {
+            "text": "Good refresh . Motivational and enthusiastic teacher. Highly recommend",
+            "languageCode": "en"
+          },
+          "originalText": {
+            "text": "Good refresh . Motivational and enthusiastic teacher. Highly recommend",
+            "languageCode": "en"
+          },
+          "authorAttribution": {
+            "displayName": "Stephanie Dahan",
+            "uri": "https://www.google.com/maps/contrib/101658774366043240296/reviews",
+            "photoUri": "https://lh3.googleusercontent.com/a/ACg8ocIvsZy3Aha30EakJPv4OEkpgESLC8bzQpIZzRW5-8VpJ32cFA=s128-c0x00000000-cc-rp-mo"
+          },
+          "publishTime": "2024-02-02T10:45:10.654119Z",
+          "flagContentUri": "https://www.google.com/local/review/rap/report?postId=ChZDSUhNMG9nS0VJQ0FnSUR0Mk5hbUN3EAE&d=17924085&t=1",
+          "googleMapsUri": "https://www.google.com/maps/reviews/data=!4m6!14m5!1m4!2m3!1sChZDSUhNMG9nS0VJQ0FnSUR0Mk5hbUN3EAE!2m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/reviews/Ci9DQUlRQUNvZENodHljRjlvT21obGMwTTJTMms1T0dSNlRuQnVRVVpoT0cxWldtYxAB",
+          "relativePublishTimeDescription": "a week ago",
+          "rating": 1,
+          "text": {
+            "text": "If your GP has a problem with you, you can file a complaint and then a dispute (€50). Keep in mind that it will take a year, and the dispute resolution will have no connection whatsoever with the dispute you filed. The dispute committee is unaware of the medical world, and they're going to ask your GP about it. Since there's a shortage of GPs, and DOKH trains these types of GPs, they won't dispute it, so it doesn't matter what your doctor does or doesn't do. DOKH always supports your doctor. Agreements made with DOKH aren't kept, or in other words, you don't hear anything at all. Both DOKH and your doctor would rather have you, the patient, disappear into the ether as quickly as possible. The complaint and dispute are a complete charade at DOKH.",
+            "languageCode": "en-US"
+          },
+          "originalText": {
+            "text": "als de huisarts een probleem heeft met U dan dien je hier een klacht in en vervolgens een geschil (€50,-) houdt er dan rekening mee dat het een jaar gaat duren en dat de uitspraak van het geschil totaal niet correspondeert met het geschil wat je hebt ingediend en dat de geschillencommissie niet op de hoogten is van de medische wereld en gaat dat dan vragen aan de huisarts??  en aangezien er een tekort is aan huisartsen en dat DOKH ook dit soort huisartsen opleidt gaan ze dit ook niet tegen spreken dus het maakt niet uit wat de arts doet of niet doet DOKH blijft altijd achter de arts staan\nafspraken wat je met DOKH afs preek dat wordt niet nagekomen of te wel je hoort helemaal niets meer dus DOKH en de arts heeft liever dat je als patiënt maar zo snel mogelijk in je urn kruipt en de klacht en geschil is bij DOKH een grote poppenkast",
+            "languageCode": "nl"
+          },
+          "authorAttribution": {
+            "displayName": "m f",
+            "uri": "https://www.google.com/maps/contrib/109764386943267829083/reviews",
+            "photoUri": "https://lh3.googleusercontent.com/a/ACg8ocLYVv86Nqy35AvikaoVHUAvUWhw8dglgEc0-Uz8wHNdzYm7fA=s128-c0x00000000-cc-rp-mo"
+          },
+          "publishTime": "2025-09-10T10:33:29.766230806Z",
+          "flagContentUri": "https://www.google.com/local/review/rap/report?postId=Ci9DQUlRQUNvZENodHljRjlvT21obGMwTTJTMms1T0dSNlRuQnVRVVpoT0cxWldtYxAB&d=17924085&t=1",
+          "googleMapsUri": "https://www.google.com/maps/reviews/data=!4m6!14m5!1m4!2m3!1sCi9DQUlRQUNvZENodHljRjlvT21obGMwTTJTMms1T0dSNlRuQnVRVVpoT0cxWldtYxAB!2m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/reviews/ChZDSUhNMG9nS0VJQ0FnSUNEd3FqU1ZREAE",
+          "relativePublishTimeDescription": "4 months ago",
+          "rating": 1,
+          "text": {
+            "text": "DokH has been holding up cases for 4 months now, nothing has
+            come to fruition. not a single appointment is followed, everything
+            has to be followed up, they are mainly for the GP, not for patients.
+            Mediation is not mediation but a platform to allow the affiliated
+            GP to make an argument without any intervention from the so-called
+            mediator. very poor complaints handling, nothing. no help
+            whatsoever. only false promises that have not come to fruition
+            so far.\n\nOn March 26, I received an angry call from DokH
+            telling me that I had to delete the review, otherwise no
+            help would be given. However, DokH has done nothing, now they
+            suddenly know where to find me, everything has been aggravated
+            and hindered by DokH, no results whatsoever in 4 months, but
+            that doesn't seem to be important to DokH. in the future, a lawyer
+            immediately. DokH is there for the GP and unfairly protects them
+            and gives them a one-sided unfair platform. Now despite everything
+            it has become more difficult due to DokH, still go to a lawyer.\n\n
+            in response to the owner's response, DokH has acknowledged that
+            the mediation has gone completely wrong by the DokH mediator,
+            so that is not just my experience, DokH has no decisiveness
+            whatsoever and does nothing at all except to keep things wet!!\n\n
+            02-05-2024 DokH, the designated complaints organization, is now
+            blackmailing me to delete this review and refusing to explain to
+            me where I can file my complaint about the DokH complaints
+            organization elsewhere. I've had a lot of things going on my head
+            after this review, I can imagine that people are afraid to complain about the DokH complaints organization. and where else can you go? apparently nowhere.\n\nAfter 2 years of opposition, the DokH dispute body made a decision on April 18, 2025 and yielded nothing, on no point, and that is not possible. Unless evidence is omitted and ignored, facts and measurement results are distorted despite previous reports, the paying member at DokH is not at fault whatsoever according to DokH. DokH is not there for the patient, only for their paying members. to be continued..",
+            "languageCode": "en-US"
+          },
+          "originalText": {
+            "text": "al 4 maanden houd DokH zaken op, niets komt terecht. geen enkele afspraak word opgevolgd, moet overal achter aan zitten, zijn er vooral voor de huisarts niet voor patiënten. bemiddeling is geen bemiddeling maar een platform om de aangesloten huisarts een betoog te laten houden zonder enig interventie van de zo genoemde bemiddelaar. zeer slecht klachten behandeling, niets. geen enkele hulp. enkel valse beloftes waar niets van terecht komt tot op heden.\n\n26-03 word ik boos gebeld door DokH dat ik de review moet verwijderen, anders word er geen hulp gegeven. echter DokH heeft niets gedaan, nu weten ze mij opeens wel te vinden, alles is verergerd en tegen gewerkt dor DokH, geen enkel resultaat in 4 maanden, maar dat schijnt niet belangrijk te zijn voor DokH. in vervolg meteen een advocaat. DokH is er voor de huisarts en neemt deze onterecht in bescherming en geeft deze een eenzijdig oneerlijk platform. nu ondanks alle moeilijker is geworden door DokH alsnog naar een advocaat.\n\nin reactie op de reactie van de eigenaar, DokH heeft erkent dat de bemiddeling totaal de mist in is gegaan door de bemiddelaar van DokH, dat is dus niet alleen mijn ervaring, DokH heeft geen enkele daadkracht en doet niets helemaal niets behalve pappen en nat houden!!\n\n02-05-2024 DokH, de aangewezen klachten organisatie chanteerd me nu om deze review te verwijderen en weigeren mij uit te leggen waar ik elders mijn klacht over de DokH klachten organisatie aanhanging kan maken. ik heb van alles naar mn hoofd gekregen na deze review, ik kan me voorstellen dat mensen bang zijn om  te klagen over de DokH klachten organisatie. en waar kan je nog terecht? bijkbaar nergens.\n\nde DokH geschillen instantie heeft na 2 jaar van tegenwerking, d.d. 18-4-2025 een uitspraak gedaan en niets opgeleverd, op geen enkel punt, en dat kan niet. Behalve als bewijzen worden weg gelaten en genegeerd, feiten en meetresultaten worden verdraaid ondanks eerdere verslagen, het betalende lid bij DokH treft geen enkele schuld volgens DokH. DokH is er niet voor de patiënt enkel voor hun betalende leden. word vervolgd..",
+            "languageCode": "nl"
+          },
+          "authorAttribution": {
+            "displayName": "M E",
+            "uri": "https://www.google.com/maps/contrib/100115629216953278278/reviews",
+            "photoUri": "https://lh3.googleusercontent.com/a/ACg8ocIP3xRgYGa8rXM5Y1Qo2062U5L1VdC3vh1ckzACqL_rz5ixaw=s128-c0x00000000-cc-rp-mo-ba3"
+          },
+          "publishTime": "2025-04-23T06:55:19.023956Z",
+          "flagContentUri": "https://www.google.com/local/review/rap/report?postId=ChZDSUhNMG9nS0VJQ0FnSUNEd3FqU1ZREAE&d=17924085&t=1",
+          "googleMapsUri": "https://www.google.com/maps/reviews/data=!4m6!14m5!1m4!2m3!1sChZDSUhNMG9nS0VJQ0FnSUNEd3FqU1ZREAE!2m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/reviews/ChZDSUhNMG9nS0VMbTVsWnJ1NllqaGJREAE",
+          "relativePublishTimeDescription": "4 months ago",
+          "rating": 5,
+          "text": {
+            "text": "Super informative and pleasant training with very skilled teachers and actors!!!",
+            "languageCode": "en-US"
+          },
+          "originalText": {
+            "text": "Super informatieve en prettige scholing met hele bekwame docenten en acteur!!!",
+            "languageCode": "nl"
+          },
+          "authorAttribution": {
+            "displayName": "Sandra Lelieveldt",
+            "uri": "https://www.google.com/maps/contrib/104742407829499627803/reviews",
+            "photoUri": "https://lh3.googleusercontent.com/a/ACg8ocLFHOYJrNSG3RO_jRtYU1C77RN5iyeLta85C9dmcwCHNSZT3Q=s128-c0x00000000-cc-rp-mo"
+          },
+          "publishTime": "2025-05-09T12:09:03.631875Z",
+          "flagContentUri": "https://www.google.com/local/review/rap/report?postId=ChZDSUhNMG9nS0VMbTVsWnJ1NllqaGJREAE&d=17924085&t=1",
+          "googleMapsUri": "https://www.google.com/maps/reviews/data=!4m6!14m5!1m4!2m3!1sChZDSUhNMG9nS0VMbTVsWnJ1NllqaGJREAE!2m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/reviews/ChdDSUhNMG9nS0VJQ0FnSURYX05MaTJnRRAB",
+          "relativePublishTimeDescription": "10 months ago",
+          "rating": 5,
+          "text": {
+            "text": "I received fantastic help! I was about to give up because it was such a long process, but my contact person at DOKH was very dedicated and really pulled me through! We are very grateful to her!",
+            "languageCode": "en-US"
+          },
+          "originalText": {
+            "text": "Ik ben fantastisch geholpen! Ik wilde bijna opgeven omdat het een lange zaak was , maar mijn contactpersoon van DOKH was zeer betrokken en heeft me echt er doorheen gesleept! Wij zijn haar erg dankbaar!",
+            "languageCode": "nl"
+          },
+          "authorAttribution": {
+            "displayName": "Sjoukje Broks",
+            "uri": "https://www.google.com/maps/contrib/113729885990361212223/reviews",
+            "photoUri": "https://lh3.googleusercontent.com/a-/ALV-UjVpOhoWFRQOGw3pvjRCKIaTo6tFehQY9sQntdCbXix9k0aauW8E8w=s128-c0x00000000-cc-rp-mo"
+          },
+          "publishTime": "2024-10-25T06:34:34.682695Z",
+          "flagContentUri": "https://www.google.com/local/review/rap/report?postId=ChdDSUhNMG9nS0VJQ0FnSURYX05MaTJnRRAB&d=17924085&t=1",
+          "googleMapsUri": "https://www.google.com/maps/reviews/data=!4m6!14m5!1m4!2m3!1sChdDSUhNMG9nS0VJQ0FnSURYX05MaTJnRRAB!2m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        }
+      ],
+      "photos": [
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/photos/AciIO2c3bS8ALHoMzYnuHZw1rsTzMQTvNbC6dORIAnJnJT3vEnoWG-iPEQ5M0e_Y4hwb_AHgAni7n0oRdQs9zpSo71gPGbLcoMwoCzKUgcG7MprCKONEuTY6eJOaTWYfVAj4mfRBa-AxgKlAZoepZw_I5VtwYHSKv5BedgaDQr6A24YaG1l8467_trG79rLTfwnDrgp62LiavoZaTJRa-A4KPwWxNCNo0x5KEPtaDgUi9qOwvl4kC_35AaJJ5WTYPas3HHB-Iz_vT4yNl0iVrYslEWlunlzPBW8Frxt3oYhKUyx42w",
+          "widthPx": 800,
+          "heightPx": 600,
+          "authorAttributions": [
+            {
+              "displayName": "Stichting DOKh",
+              "uri": "https://maps.google.com/maps/contrib/111076378172416391612",
+              "photoUri": "https://lh3.googleusercontent.com/a-/ALV-UjXlyqyTeSqKn56YDssDJ59iL0mLrhJd4WdY2MjJsUahGRsjvAw=s100-p-k-no-mo"
+            }
+          ],
+          "flagContentUri": "https://www.google.com/local/imagery/report/?cb_client=maps_api_places.places_api&image_key=!1e10!2sAF1QipPIFMPpV-66LkA3Jw3R0o3L6ywDehD2ttLlExbm&hl=en-US",
+          "googleMapsUri": "https://www.google.com/maps/place//data=!3m4!1e2!3m2!1sAF1QipPIFMPpV-66LkA3Jw3R0o3L6ywDehD2ttLlExbm!2e10!4m2!3m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/photos/AciIO2eEtWMnMrOg-SXMAmIrac57GUSlnPzTMYVWRue38lnhZ6mPH2xEA5WUnqHJ54ifbHsw0fFPfIqigMhceuXIzLiwGwEmJrDiaDtlR2sDcRbZOEyrwL7L_yyb134IFZt4dtWDERsZWZIDxP_GlGfwk4_5G21QdZHdMzfEsLhwuRph7UZcPBqpgYCAMQ56VT7jWBANliV5_2Eg49sS_vZVKY3uOdVmIHjKD5z_1529lx5owo7hMMZtyM1Ju7zwndihF6GHia3yt916Tv600C7PyCUXHmo2QWz0omsC-bJbX5oeFw",
+          "widthPx": 800,
+          "heightPx": 600,
+          "authorAttributions": [
+            {
+              "displayName": "Stichting DOKh",
+              "uri": "https://maps.google.com/maps/contrib/111076378172416391612",
+              "photoUri": "https://lh3.googleusercontent.com/a-/ALV-UjXlyqyTeSqKn56YDssDJ59iL0mLrhJd4WdY2MjJsUahGRsjvAw=s100-p-k-no-mo"
+            }
+          ],
+          "flagContentUri": "https://www.google.com/local/imagery/report/?cb_client=maps_api_places.places_api&image_key=!1e10!2sAF1QipNlnvQk3Xlz0czhIzB0o7Qd2IytAd0yRPPgraPR&hl=en-US",
+          "googleMapsUri": "https://www.google.com/maps/place//data=!3m4!1e2!3m2!1sAF1QipNlnvQk3Xlz0czhIzB0o7Qd2IytAd0yRPPgraPR!2e10!4m2!3m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/photos/AciIO2frIvsGM3jlJEzv_hfvV479c2MxEL2O7kb0LBo1z2qCeDlEZE-5xKPXDXKllro8kX9IYyyUvvY8nl3XiEteQPKDh245Is8nHZBOGLTUu7FarfBIIOhA7QqqNdGur3xpNXTCss0rXdUAedSkYCNUpwauyChT-HP3ylrw9nnkldcgTqXhPJekK2W6YprbxkcB0G1K5jZDa6Owhe_jnfOICya3qE5gQCMRE_XgmNsNqC5K1n-kxOsHkfxT9ec90WsjWGX0LSQpISGQncmkTlIa3fGC1YbTVMplE4F9UwMHhqZpmg",
+          "widthPx": 600,
+          "heightPx": 800,
+          "authorAttributions": [
+            {
+              "displayName": "Stichting DOKh",
+              "uri": "https://maps.google.com/maps/contrib/111076378172416391612",
+              "photoUri": "https://lh3.googleusercontent.com/a-/ALV-UjXlyqyTeSqKn56YDssDJ59iL0mLrhJd4WdY2MjJsUahGRsjvAw=s100-p-k-no-mo"
+            }
+          ],
+          "flagContentUri": "https://www.google.com/local/imagery/report/?cb_client=maps_api_places.places_api&image_key=!1e10!2sAF1QipMwU2ZOU7uEj-rawjG1Cl1jFpXTvdIaKxMhj-Ji&hl=en-US",
+          "googleMapsUri": "https://www.google.com/maps/place//data=!3m4!1e2!3m2!1sAF1QipMwU2ZOU7uEj-rawjG1Cl1jFpXTvdIaKxMhj-Ji!2e10!4m2!3m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/photos/AciIO2frPci59CM2dFm8exKQJuyfy0KrOgKmOWBtM6DDWZI9lHwZ-BHfj6L9WaQspzncKt3Usqo5Um-tSUYhvT03ktcmTnSkciflUbh0r3DLz43OegfeZ2yE_YgtW0uHreAL2OqIIYxYmKc9C-RAmzhGDH02IC0y75c6Ndfsc_bLae_HQKDi1zrLIeHAaPdI-O5HlqpbAMyU-RKwv3YN39bgNu_qifDB5HfNjltaBIR4D_zEo0UAZCm0QELfbmwogs_yd2M4TZH7uo8UxqVYxpEuiVWwOcAz5aj4WAPoySXux9l55g",
+           "widthPx": 3005,
+          "heightPx": 4250,
+          "authorAttributions": [
+            {
+              "displayName": "Stichting DOKh",
+              "uri": "https://maps.google.com/maps/contrib/111076378172416391612",
+              "photoUri": "https://lh3.googleusercontent.com/a-/ALV-UjXlyqyTeSqKn56YDssDJ59iL0mLrhJd4WdY2MjJsUahGRsjvAw=s100-p-k-no-mo"
+            }
+          ],
+          "flagContentUri": "https://www.google.com/local/imagery/report/?cb_client=maps_api_places.places_api&image_key=!1e10!2sAF1QipNMD7CSk_InVCVYHGm4EOow6olqK74zDP4S_dRD&hl=en-US",
+          "googleMapsUri": "https://www.google.com/maps/place//data=!3m4!1e2!3m2!1sAF1QipNMD7CSk_InVCVYHGm4EOow6olqK74zDP4S_dRD!2e10!4m2!3m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        }
+      ],
+      "accessibilityOptions": {
+        "wheelchairAccessibleParking": true,
+        "wheelchairAccessibleEntrance": true
+      },
+      "addressDescriptor": {
+        "landmarks": [
+          {
+            "name": "places/ChIJkU7Xei5Wz0cR0H_dTEyxdb8",
+            "placeId": "ChIJkU7Xei5Wz0cR0H_dTEyxdb8",
+            "displayName": {
+              "text": "McDonald's",
+              "languageCode": "en"
+            },
+            "types": [
+              "establishment",
+              "food",
+              "meal_takeaway",
+              "point_of_interest",
+              "restaurant"
+            ],
+            "straightLineDistanceMeters": 75.05915,
+            "travelDistanceMeters": 133.93727
+          },
+          {
+            "name": "places/ChIJ-wMOIS5Wz0cRm8g6WjXW3Mg",
+            "placeId": "ChIJ-wMOIS5Wz0cRm8g6WjXW3Mg",
+            "displayName": {
+              "text": "KFC",
+              "languageCode": "en"
+            },
+            "types": [
+              "establishment",
+              "food",
+              "meal_delivery",
+              "meal_takeaway",
+              "point_of_interest",
+              "restaurant"
+            ],
+            "straightLineDistanceMeters": 299.31604,
+            "travelDistanceMeters": 557.86
+          },
+          {
+            "name": "places/ChIJDwET7phXz0cRZk4GfrptwXE",
+            "placeId": "ChIJDwET7phXz0cRZk4GfrptwXE",
+            "displayName": {
+              "text": "Smart Business Center Alkmaar",
+              "languageCode": "nl"
+            },
+            "types": [
+              "establishment",
+              "point_of_interest",
+              "real_estate_agency"
+            ],
+            "straightLineDistanceMeters": 104.47736,
+            "travelDistanceMeters": 183.5595
+          },
+          {
+            "name": "places/ChIJcY-2KDBWz0cRgGhRJ6yRHNc",
+            "placeId": "ChIJcY-2KDBWz0cRgGhRJ6yRHNc",
+            "displayName": {
+              "text": "Praxis Bouwmarkt Alkmaar",
+              "languageCode": "en"
+            },
+            "types": [
+              "establishment",
+              "home_goods_store",
+              "point_of_interest",
+              "store"
+            ],
+            "straightLineDistanceMeters": 414.5708,
+            "travelDistanceMeters": 590.88293
+          },
+          {
+            "name": "places/ChIJM7EXMyxWz0cR0kn7xq45iJ8",
+            "placeId": "ChIJM7EXMyxWz0cR0kn7xq45iJ8",
+            "displayName": {
+              "text": "Makelaar Alkmaar | VLIEG Makelaars, Hypotheken en Verzekeringen",
+              "languageCode": "nl"
+            },
+            "types": [
+              "establishment",
+              "finance",
+              "insurance_agency",
+              "point_of_interest",
+              "real_estate_agency"
+            ],
+            "straightLineDistanceMeters": 143.23524,
+            "travelDistanceMeters": 197.47107
+          }
+        ]
+      },
+      "googleMapsLinks": {
+        "directionsUri": "https://www.google.com/maps/dir//''/data=!4m7!4m6!1m1!4e2!1m2!1m1!1s0x47cf57b34025a271:0xfc14f868104f894f!3e0?g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "placeUri": "https://maps.google.com/?cid=18164416322925988175&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "writeAReviewUri": "https://www.google.com/maps/place//data=!4m3!3m2!1s0x47cf57b34025a271:0xfc14f868104f894f!12e1?g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "reviewsUri": "https://www.google.com/maps/place//data=!4m4!3m3!1s0x47cf57b34025a271:0xfc14f868104f894f!9m1!1b1?g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "photosUri": "https://www.google.com/maps/place//data=!4m3!3m2!1s0x47cf57b34025a271:0xfc14f868104f894f!10e5?g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA"
+      },
+      "timeZone": {
+        "id": "Europe/Amsterdam"
+      },
+      "postalAddress": {
+        "regionCode": "NL",
+        "languageCode": "en-US",
+        "postalCode": "1812 RB",
+        "locality": "Alkmaar",
+        "addressLines": [
+          "Robijnstraat 6"
+        ]
+      }
+    }
+  ],
+  "contextualContents": [
+    {
+      "photos": [
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/photos/AciIO2fHKZIs4OfAFQmdG9CVpkIkUU9X8-L6q9Wq4jzOaOgreo5XWZpHfjn5Mp9DSLcNa3zGyZe83IxUu15i54Pm3cCPyWh0s5B5aHb9K7dsZbTOlC30uNAjmO3dl53ET7Bwvo-idqskAFKF3U1VHRoZ0G-rdKq_9b_Fv4wZwb9MZo8I_-K9mVT4YHbC7orinb2v1DucfjbtbB-VMjMbrH4z-HzskkumFEUWT2oYu8Z6d2V-ihNYi4yROiwA4DtiFAS1bW8GYc1A5EMxxcFb5ujs-svqxfQGQr74Wg",
+          "widthPx": 800,
+          "heightPx": 600,
+          "authorAttributions": [
+            {
+              "displayName": "Stichting DOKh",
+              "uri": "https://maps.google.com/maps/contrib/111076378172416391612",
+              "photoUri": "https://lh3.googleusercontent.com/a-/ALV-UjXlyqyTeSqKn56YDssDJ59iL0mLrhJd4WdY2MjJsUahGRsjvAw=s100-p-k-no-mo"
+            }
+          ],
+          "flagContentUri": "https://www.google.com/local/imagery/report/?cb_client=maps_api_places&image_key=!1e10!2sAF1QipPIFMPpV-66LkA3Jw3R0o3L6ywDehD2ttLlExbm&hl=en-US",
+          "googleMapsUri": "https://www.google.com/maps/place//data=!3m4!1e2!3m2!1sAF1QipPIFMPpV-66LkA3Jw3R0o3L6ywDehD2ttLlExbm!2e10!4m2!3m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/photos/AciIO2face8Vol6RmLrmLxnekZlUAATUVNPlqkIdAP10eFSgB_tmO98-UjnKWXo9qOmDIJBCYWTGPjooDctYhRQYefrGVuKzMEmzy568KFKnV1r81NIGG18e5hpDs4_WQXyvfkQIQo2_PqC5mlLr5YkJYqcWMF6GFOfPH0Bz-cTLqHr5giITWX26DHLDwFTUt1kOApg28zsguKnO4UmBVR9bjV-jS7ykkh4y-hYTuRrD0Rnto3DCwGYHJj8A4HzbTcXWpUb5RQvO52T6HaAdWCcGGUdQLXIiVLCNyQ",
+          "widthPx": 800,
+          "heightPx": 600,
+          "authorAttributions": [
+            {
+              "displayName": "Stichting DOKh",
+              "uri": "https://maps.google.com/maps/contrib/111076378172416391612",
+              "photoUri": "https://lh3.googleusercontent.com/a-/ALV-UjXlyqyTeSqKn56YDssDJ59iL0mLrhJd4WdY2MjJsUahGRsjvAw=s100-p-k-no-mo"
+            }
+          ],
+          "flagContentUri": "https://www.google.com/local/imagery/report/?cb_client=maps_api_places&image_key=!1e10!2sAF1QipNlnvQk3Xlz0czhIzB0o7Qd2IytAd0yRPPgraPR&hl=en-US",
+          "googleMapsUri": "https://www.google.com/maps/place//data=!3m4!1e2!3m2!1sAF1QipNlnvQk3Xlz0czhIzB0o7Qd2IytAd0yRPPgraPR!2e10!4m2!3m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/photos/AciIO2eKRw2-ze5hWSub9y66Gcin1bSeZGpQWrfy5tD6sXx6UXHxatMo5EEDD725RYJ_r-gSTpXPxfM35wbeaYBzgSDHVFkY3iMuNHpHYEQbaRwgM1mSRgd6j605U8JIHf9asRV_lhiCc3OfLH7OQpBZYfTrcLP0G6fv_NGP3_H4vZj3zczRHwcULZ1LjVtjvp02MFtvCiHSTKf_5oyzIFot0O45SqYnRPFtiJYeYQCK1Gh-nsrWL1p_idiWu_5uNnHnLlXPXn97wJXuDha1Bzushs6vAIKPyZKCuA",
+          "widthPx": 600,
+          "heightPx": 800,
+          "authorAttributions": [
+            {
+              "displayName": "Stichting DOKh",
+              "uri": "https://maps.google.com/maps/contrib/111076378172416391612",
+              "photoUri": "https://lh3.googleusercontent.com/a-/ALV-UjXlyqyTeSqKn56YDssDJ59iL0mLrhJd4WdY2MjJsUahGRsjvAw=s100-p-k-no-mo"
+            }
+          ],
+          "flagContentUri": "https://www.google.com/local/imagery/report/?cb_client=maps_api_places&image_key=!1e10!2sAF1QipMwU2ZOU7uEj-rawjG1Cl1jFpXTvdIaKxMhj-Ji&hl=en-US",
+          "googleMapsUri": "https://www.google.com/maps/place//data=!3m4!1e2!3m2!1sAF1QipMwU2ZOU7uEj-rawjG1Cl1jFpXTvdIaKxMhj-Ji!2e10!4m2!3m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        },
+        {
+          "name": "places/ChIJcaIlQLNXz0cRT4lPEGj4FPw/photos/AciIO2eWtMDFKV5cfJbF_vLytMhkTudUb9f1ZOIjj3iOhwwNR44ooIf8m51suHW-qBBA0gphFw352QCe2vISMy6_qHsdTrffpE_fLaklsWfzYri2344ksc3lJ7Lcra5vixHTMRP0ybHTrtleQyZ7QFxO0d5tP61Eq6jyashSvLabVxVxS5Wfuv2jLajToSuziV3b-oVune7k_GxLXHbdOfVae_EUjRWSWO2AkIBCiqsKL1XqEfRHdAZnSFh9LugAXCnQxionhRxY7b0JBP_p6w9lZXgniIP_szCb9A",
+          "widthPx": 3005,
+          "heightPx": 4250,
+          "authorAttributions": [
+            {
+              "displayName": "Stichting DOKh",
+              "uri": "https://maps.google.com/maps/contrib/111076378172416391612",
+              "photoUri": "https://lh3.googleusercontent.com/a-/ALV-UjXlyqyTeSqKn56YDssDJ59iL0mLrhJd4WdY2MjJsUahGRsjvAw=s100-p-k-no-mo"
+            }
+          ],
+          "flagContentUri": "https://www.google.com/local/imagery/report/?cb_client=maps_api_places&image_key=!1e10!2sAF1QipNMD7CSk_InVCVYHGm4EOow6olqK74zDP4S_dRD&hl=en-US",
+          "googleMapsUri": "https://www.google.com/maps/place//data=!3m4!1e2!3m2!1sAF1QipNMD7CSk_InVCVYHGm4EOow6olqK74zDP4S_dRD!2e10!4m2!3m1!1s0x47cf57b34025a271:0xfc14f868104f894f"
+        }
+      ]
+    }
+  ],
+  "searchUri": "https://www.google.com/maps/search/dokh"
+}
+ */
+}
+//endregion
 
 ///=============================================================================
 
