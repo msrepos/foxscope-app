@@ -74,9 +74,49 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
               ),
             ),
           ),
+
+          // Search result
+          if (searchText.isNotEmpty && scopes?.isNotEmpty == true)
+            Positioned(
+              top: 75,
+              left: 16,
+              right: 16,
+              child: searchResultListWidget(),
+            ),
         ],
       ),
       bottomNavigationBar: const AppFooter(currentIndex: 1),
+    );
+  }
+
+  Widget searchResultListWidget() {
+    final screenSize = MediaQuery.of(context).size;
+
+    return Container(
+      height: screenSize.height / 2 - 50,
+      width: screenSize.width,
+      //margin: EdgeInsets.only(left: 20, right: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(7),
+        boxShadow: [
+          BoxShadow(spreadRadius: 0.01, blurRadius: 0.01, offset: Offset(0, 1)),
+        ],
+      ),
+      child: ListView.builder(
+        itemCount: scopes?.length ?? 0,
+        itemBuilder: (context, idx) => scopeCardWidget(
+          scope: scopes![idx],
+          useCards: false,
+          onTap: () => onScopeTapped(
+            scopes![idx],
+            close: () => setState(() {
+              searchText = ""; //todo
+              FocusScope.of(context).unfocus();
+            }),
+          ),
+        ),
+      ),
     );
   }
 
@@ -87,10 +127,11 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
 
   void onSearchTextChanged(String value) {
     searchText = value;
+    if (searchText.isEmpty) setState(() {});
 
     if (!waitText) {
       waitText = true;
-      Future.delayed(Duration(milliseconds: 1000), () {
+      Future.delayed(Duration(milliseconds: 800), () {
         if (searchText.isNotEmpty) {
           runSearchJob(searchText);
         }
@@ -102,7 +143,21 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
 
   void runSearchJob(String searchText) async {
     //todo call api
-    debugPrint("${runtimeType}.runSearchJob(searchText: $searchText)");
+    debugPrint("$runtimeType.runSearchJob(searchText: $searchText)");
+
+    if (lastReceivedLocation != null) {
+      var scopes = await fetchScopes(lastReceivedLocation!);
+      if (scopes?.isNotEmpty == true) {
+        setState(() {});
+      }
+    }
+    //
+    else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+        "Your location is unknow",
+      )));
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -123,6 +178,7 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
                     topLeft: Radius.circular(15),
                     topRight: Radius.circular(15),
                   ),
+                  color: Colors.white,
                 ),
                 padding: EdgeInsets.all(15),
                 child: SingleChildScrollView(
@@ -138,59 +194,9 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
                       ),
                       ...scopes
                               ?.map(
-                                (scope) => SizedBox(
-                                  width: double.maxFinite,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      Navigator.pop(context);
-
-                                      var lat = double.tryParse("${scope.lat}");
-                                      var lng = double.tryParse("${scope.lng}");
-
-                                      if (lat != null && lng != null) {
-                                        mapState
-                                            ?.moveToLocation(LatLng(lat, lng));
-                                      } else {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text("Data is missing"),
-                                          ),
-                                        );
-                                      }
-                                    },
-                                    child: Card(
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(10.0),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              scope.code ?? "",
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[400],
-                                              ),
-                                            ),
-                                            Text(
-                                              scope.name ?? "",
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                              ),
-                                            ),
-                                            Text(
-                                              scope.note ?? "",
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                (scope) => scopeCardWidget(
+                                  scope: scope,
+                                  onTap: () => onScopeTapped(scope),
                                 ),
                               )
                               .toList() ??
@@ -204,14 +210,87 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
     );
   }
 
+  Widget scopeCardWidget({
+    required Scope scope,
+    bool useCards = true,
+    required VoidCallback onTap,
+  }) {
+    Widget container(Widget child) => useCards
+        ? Card(
+            surfaceTintColor: Colors.white60,
+            child: child,
+          )
+        : child;
+
+    return SizedBox(
+      width: double.maxFinite,
+      child: GestureDetector(
+        onTap: onTap,
+        child: container(Padding(
+          padding: const EdgeInsets.all(10.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                scope.code ?? "",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[400],
+                ),
+              ),
+              Text(
+                scope.name ?? "",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+              Text(
+                scope.note ?? "",
+                style: TextStyle(
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        )),
+      ),
+    );
+  }
+
+  void onScopeTapped(Scope scope, {VoidCallback? close}) {
+    if (close == null) Navigator.pop(context);
+    close?.call();
+
+    var lat = double.tryParse("${scope.lat}");
+    var lng = double.tryParse("${scope.lng}");
+
+    if (lat != null && lng != null) {
+      mapState?.moveToLocation(LatLng(lat, lng));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Data is missing"),
+        ),
+      );
+    }
+  }
+
   //---------------------------------------------------------------------------
 
+  GeoLocation? lastReceivedLocation;
+
   @override
-  void onLocationDropped(GeoLocation location) async {
+  void onLocationDropped(GeoLocation location) {
+    lastReceivedLocation = location;
+    fetchScopes(location);
+  }
+
+  Future<List<Scope>?> fetchScopes(GeoLocation location) async {
     var scopesRes = await ScopesRepository().fetchScopes();
     scopes = scopesRes.result;
 
-    if (!mounted) return;
+    if (!mounted) return scopes;
 
     setState(() {});
 
@@ -241,6 +320,8 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
         ),
       );
     }
+
+    return scopes;
   }
 
   void viewScopeInfo(Scope scope) {
