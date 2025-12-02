@@ -79,6 +79,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Widget _headerIconBox(IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary, width: 1.5),
+      ),
+      child: Icon(icon, color: AppColors.primary, size: 24),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -179,14 +191,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
                           const SizedBox(height: 10),
 
+                          // Separator Line
+                          Container(
+                            height: 1,
+                            width: double.infinity,
+                            color: Colors.grey,
+                          ),
+
+                          const SizedBox(height: 10),
+
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: const [
-                              Icon(Icons.device_hub_outlined, color: Colors.black54),
-                              Icon(Icons.arrow_right_alt, color: Colors.black54),
-                              Icon(Icons.share_outlined, color: Colors.black54),
-                              Icon(Icons.qr_code, color: Colors.black54),
-                              Icon(Icons.copy_outlined, color: Colors.black54),
+                            children: [
+                              _headerIconBox(Icons.device_hub_outlined),
+                              _headerIconBox(Icons.arrow_right_alt),
+                              _headerIconBox(Icons.share_outlined),
+                              _headerIconBox(Icons.qr_code),
+                              _headerIconBox(Icons.copy_outlined),
                             ],
                           ),
                         ],
@@ -301,7 +322,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, color: AppColors.primary, size: 28),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: AppColors.primary, width: 1.5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(icon, color: Colors.black, size: 28),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       label,
@@ -312,6 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+
             if (hasBadge)
               const Positioned(
                 top: 6,
