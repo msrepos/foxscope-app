@@ -33,7 +33,6 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: const AppHeader(title: "Profile"),
       backgroundColor: const Color(0xFFF2F2F2),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -46,7 +45,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         ),
       ),
-
       bottomNavigationBar: const AppFooter(currentIndex: 2),
     );
   }
@@ -76,7 +74,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // 🔹 2nd box — Link list
   Widget _buildLinksBox(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -86,11 +83,17 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       child: Column(
         children: [
-          _buildLinkItem(Icons.person, "Edit Profile", () {}),
+          _buildLinkItem(Icons.person, "Edit Profile", () {
+            context.push('/editProfile'); // ✅ keep history
+          }),
           _buildDivider(),
-          _buildLinkItem(Icons.lock, "Change Password", () {}),
+          _buildLinkItem(Icons.lock, "Change Password",() {
+            context.push('/changePasswordS1'); // ✅ keep history
+          }),
           _buildDivider(),
-          _buildLinkItem(Icons.email, "Change Email Address", () {}),
+          _buildLinkItem(Icons.email, "Change Email Address",() {
+            context.push('/changeEmailS1'); // ✅ keep history
+          }),
         ],
       ),
     );
@@ -108,7 +111,8 @@ class _ProfilePageState extends State<ProfilePage> {
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                style:
+                const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
             ),
             const Icon(Icons.chevron_right),
@@ -137,9 +141,12 @@ class _ProfilePageState extends State<ProfilePage> {
         children: [
           Row(
             children: [
-              Expanded(child: _buildStatCard("Paid", "12", big: true, primary: true)),
+              Expanded(
+                  child:
+                  _buildStatCard("Paid", "12", big: true, primary: true)),
               const SizedBox(width: 12),
-              Expanded(child: _buildStatCard("Free", "5", big: true, primary: true)),
+              Expanded(
+                  child: _buildStatCard("Free", "5", big: true, primary: true)),
             ],
           ),
           const SizedBox(height: 12),
@@ -157,7 +164,8 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, {bool big = false, bool primary = false}) {
+  Widget _buildStatCard(String title, String value,
+      {bool big = false, bool primary = false}) {
     if (!primary) {
       return Container(
         height: big ? 90 : 70,
@@ -170,9 +178,13 @@ class _ProfilePageState extends State<ProfilePage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
-              Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(value,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -194,18 +206,21 @@ class _ProfilePageState extends State<ProfilePage> {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: AppColors.primary,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(8)),
             ),
             child: Text(
               title,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ),
           Expanded(
             child: Center(
               child: Text(
                 value,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style:
+                const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
             ),
           ),

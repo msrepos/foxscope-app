@@ -20,12 +20,21 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: false, // We control leading manually
       titleSpacing: 0, // Ensures title starts right after leading widget
 
+
+      //Done By Hagar
       leading: showBack
           ? IconButton(
-              icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
-              onPressed: () => context.go('/home'),
-            )
+        icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+        onPressed: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        },
+      )
           : null,
+
 
       title: Text(
         title,

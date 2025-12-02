@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:foxscope/core/widgets/map.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/presentation/pages/profile_module/change_email_address.dart';
+import '../../features/auth/presentation/pages/profile_module/change_email_p2.dart';
+import '../../features/auth/presentation/pages/profile_module/change_password.dart';
+import '../../features/auth/presentation/pages/profile_module/change_password_p2.dart';
+import '../../features/auth/presentation/pages/profile_module/edit_profile.dart';
 import '../../features/onboarding/presentation/pages/splash_page.dart';
 import '../../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
@@ -128,6 +133,29 @@ class AppRouter {
         path: '/language',
         builder: (context, state) => const LanguagePage(),
       ),
+
+      //Hagar -- Profile==================================
+      GoRoute(
+        path: '/editProfile',
+        builder: (context, state) => const EditProfile(),
+      ),
+      GoRoute(
+        path: '/changeEmailS1',
+        builder: (context, state) => const ChangeEmailScreen1(),
+      ),
+      GoRoute(
+        path: '/changePasswordS1',
+        builder: (context, state) => const ChangePasswordScreen1(),
+      ),
+      GoRoute(
+        path: '/changePasswordS2',
+        builder: (context, state) => const ChangePasswordScreen2(),
+      ),
+      GoRoute(
+        path: '/changeEmailS2',
+        builder: (context, state) => const ChangeEmailScreen2(),
+      ),
+
     ],
   );
 }
