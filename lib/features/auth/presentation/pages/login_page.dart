@@ -9,6 +9,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/constants/app_env.dart';
+import '../../../../core/utils/result.dart';
+import '../../../../core/utils/string_set.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -22,38 +24,105 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController passwordController = TextEditingController();
   bool isLoading = false;
 
-  Future<void> login() async {
-    setState(() => isLoading = true);
-
-    final user = await AuthRepository().login(
-      username: emailController.text.trim(),
-      password: passwordController.text.trim(),
+  Future<Result<User>> login({
+    required String username,
+    required String password,
+    IAccountStorage<User>? userStorage,
+  }) async {
+    final loginUrl = Uri.parse(
+      "https://api.foxscope.com/foxscope/authentication/",
     );
 
-    if (mounted) {
-      if (user.result != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Login Successful"),
-            backgroundColor: Colors.green,
-          ),
-        );
+    final profileUrl = Uri.parse(
+      "https://api.foxscope.com/foxscope/profile/min_details",
+    );
 
-        context.go('/home', extra: user.result?.userId);
-      }
-      //
-      else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(user.message?.get(true) ?? "Login failed"),
-            backgroundColor: Colors.red,
-          ),
+    try {
+      /// 1️⃣ LOGIN REQUEST
+      final loginResponse = await http.post(
+        loginUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'email': username.trim(),
+          'password': password.trim(),
+        }),
+      );
+
+      print("LOGIN STATUS: ${loginResponse.statusCode}");
+      print("LOGIN BODY: ${loginResponse.body}");
+
+      final loginData = jsonDecode(loginResponse.body);
+
+      if (loginResponse.statusCode != 200 || loginData["token"] == null) {
+        return Result(
+          null,
+          message: StringSet(loginData["message"] ?? "Login failed"),
         );
       }
+
+      final token = loginData["token"];
+
+      /// 2️⃣ SAVE TOKEN
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', token);
+
+      /// 3️⃣ FETCH PROFILE MIN DETAILS
+      final profileResponse = await http.get(
+        profileUrl,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print("PROFILE STATUS: ${profileResponse.statusCode}");
+      print("PROFILE BODY: ${profileResponse.body}");
+
+      if (profileResponse.statusCode != 200) {
+        return Result(
+          null,
+          message: StringSet("Failed to load user profile"),
+        );
+      }
+
+      final profileData = jsonDecode(profileResponse.body);
+
+      final userId = profileData["uuid"];
+      final userName =
+          "${profileData["first_name"]} ${profileData["last_name"]}";
+
+      /// 4️⃣ SAVE USER DATA
+      await prefs.setString('user_id', userId);
+      await prefs.setString('user_name', userName);
+      await prefs.setString('user_email', profileData["email"]);
+
+      /// 5️⃣ MAP USER
+      final user = UserMapper().fromMap({
+        'token': token,
+        'userId': userId,
+        'userName': userName,
+      });
+
+      (userStorage ?? AccountStorage(UserMapper())).saveAccount(
+        user,
+        username.trim(),
+        password.trim(),
+      );
+
+      /// 6️⃣ NAVIGATE
+      context.go('/home', extra: userId);
+
+      return Result(user);
+    } catch (e, s) {
+      print("LOGIN ERROR: $e");
+      print(s);
+      return Result(null, message: StringSet("Error: $e"));
     }
-
-    setState(() => isLoading = false);
   }
+
 
   @override
   Widget build(BuildContext ctx) {
@@ -73,25 +142,18 @@ class _LoginPageState extends State<LoginPage> {
                     color: Colors.black87, size: 28),
               ),
 
-              const SizedBox(height: 40),
-
               Center(
-                child: Image.asset('assets/images/login.png', height: 160),
+                child: Image.asset('assets/images/login.png', height: 250),
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 10),
 
               const Text(
                 'Sign In',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Please Login to continue',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 10),
 
               TextField(
                 controller: emailController,
@@ -114,32 +176,53 @@ class _LoginPageState extends State<LoginPage> {
               ),
 
               const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: isLoading
+                ? null
+                : () async {
+              setState(() => isLoading = true);
 
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : login,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Login',
-                          style: TextStyle(fontSize: 16, color: Colors.white),
-                        ),
-                ),
+              await login(
+                username: emailController.text.trim(),
+                password: passwordController.text.trim(),
+              );
+
+              if (mounted) {
+                setState(() => isLoading = false);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.black,
+              disabledBackgroundColor: AppColors.black.withOpacity(0.6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
               ),
-
+            ),
+            child: isLoading
+                ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: Colors.white,
+              ),
+            )
+                : const Text(
+              'Login',
+              style: TextStyle(fontSize: 16, color: Colors.white),
+            ),
+          ),
+        ),
               const SizedBox(height: 16),
 
               Center(
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    context.push('/forgetPassword');
+                  },
                   child: const Text(
                     'Forgot your password?',
                     style: TextStyle(color: Colors.grey),
@@ -147,8 +230,20 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
 
-              const SizedBox(height: 15),
-
+              Center(
+                child: TextButton(
+                  onPressed: () {
+                    // context.push('/createAccount');
+                  },
+                  child: const Text(
+                    'Sign up with',
+                    style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.normal,
+                        fontSize: 20),
+                  ),
+                ),
+              ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

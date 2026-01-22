@@ -28,6 +28,7 @@ class AppFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     return BottomNavigationBar(
       currentIndex: currentIndex,
+      backgroundColor: Colors.white,
       type: BottomNavigationBarType.fixed,
       onTap: (i) => _onTap(context, i),
 
@@ -43,19 +44,19 @@ class AppFooter extends StatelessWidget {
 
       items: const [
         BottomNavigationBarItem(
-          icon: Icon(Icons.home),
+          icon: Icon(Icons.home,size: 35,),
           label: "Home",
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.explore),
+          icon: Icon(Icons.map,size: 35,),
           label: "Discover",
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.person),
+          icon: Icon(Icons.person,size: 35,),
           label: "Profile",
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.settings),
+          icon: Icon(Icons.settings,size: 35),
           label: "Settings",
         ),
       ],

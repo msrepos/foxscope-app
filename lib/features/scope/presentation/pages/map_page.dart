@@ -6,11 +6,15 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/widgets/app_footer.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../../core/theme/app_colors.dart';
+import 'create_page.dart';
 
 class MapScopePage extends StatefulWidget {
   final Function(GeoLocation)? onLocationSelected;
+  final bool returnLocationOnly;
+
 
   const MapScopePage({
+    this.returnLocationOnly = false,
     this.onLocationSelected,
     super.key,
   });
@@ -20,25 +24,22 @@ class MapScopePage extends StatefulWidget {
 }
 
 class _MapScopePageState extends State<MapScopePage> {
+
+  //region variables
   final GlobalKey<MapWidgetState> _mapKey = GlobalKey<MapWidgetState>();
   GeoLocation? _selectedLocation;
   List<GeoLocation>? _foundLocations;
+  String searchText = "";
+  bool waitText = false;
+  //endregion
 
   @override
   Widget build(BuildContext context) {
     var size = MediaQuery.of(context).size;
-
     return Scaffold(
       appBar: const AppHeader(title: "Confirm Scope Location"),
       body: Stack(
         children: [
-          // Full-screen map placeholder image
-          /*Positioned.fill(
-            child: Image.asset(
-              'assets/images/maps.png',
-              fit: BoxFit.cover,
-            ),
-          ),*/
           Positioned.fill(
             child: MapWidget(
               key: _mapKey,
@@ -108,9 +109,9 @@ class _MapScopePageState extends State<MapScopePage> {
 
           // Full-width button on bottom over map
           Positioned(
-            left: 16,
-            right: 16,
-            bottom: 32,
+            left: 70,
+            right: 70,
+            bottom: 70,
             child: SizedBox(
               width: double.infinity,
               height: 45,
@@ -126,14 +127,21 @@ class _MapScopePageState extends State<MapScopePage> {
                 onPressed: _selectedLocation == null
                     ? null
                     : () {
-                        if (widget.onLocationSelected == null) {
-                          context.go('/scope-create', extra: _selectedLocation);
-                        }
-                        //
-                        else {
-                          widget.onLocationSelected!(_selectedLocation!);
-                        }
-                      },
+                  if (widget.returnLocationOnly) {
+                    // 🔁 Return location to previous screen
+                    print("#####$_selectedLocation");
+                    Navigator.pop(context, _selectedLocation);
+                  } else {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CreateScopePage(
+                          selectedLocation: _selectedLocation!,
+                        ),
+                      ),
+                    );
+                  }
+                },
                 child: const Text(
                   "Confirm Location",
                   style: TextStyle(
@@ -147,7 +155,7 @@ class _MapScopePageState extends State<MapScopePage> {
           ),
         ],
       ),
-      bottomNavigationBar: const AppFooter(currentIndex: 1),
+      //bottomNavigationBar: const AppFooter(currentIndex: 0),
     );
   }
 
@@ -203,11 +211,6 @@ class _MapScopePageState extends State<MapScopePage> {
       ),
     );
   }
-
-  //---------------------------------------------------------------------------
-
-  String searchText = "";
-  bool waitText = false;
 
   void onSearchTextChanged(String value) {
     searchText = value;

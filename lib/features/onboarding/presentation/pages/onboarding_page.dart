@@ -53,7 +53,8 @@ class OnboardingPage extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pushNamed(context, '/signup');
+                    context.push("/createAccount");
+                    //Navigator.pushNamed(context, '/signup');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.black,

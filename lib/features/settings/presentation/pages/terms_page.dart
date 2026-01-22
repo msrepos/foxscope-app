@@ -1,101 +1,133 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_html/flutter_html.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../../core/widgets/app_footer.dart';
 
-class TermsPage extends StatelessWidget {
+class TermsPage extends StatefulWidget {
   const TermsPage({super.key});
+
+  @override
+  State<TermsPage> createState() => _TermsPageState();
+}
+
+class _TermsPageState extends State<TermsPage> {
+  String? _termsHtml;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTerms();
+  }
+
+  Future<void> _fetchTerms() async {
+    debugPrint("🔵 Fetching Terms & Conditions");
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
+      if (token == null) {
+        setState(() {
+          _error = "Unauthorized";
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse(
+          "https://api.foxscope.com/foxscope/get_terms_and_conditions/",
+        ),
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      );
+
+      debugPrint("📡 Status: ${response.statusCode}");
+      debugPrint("📨 Raw body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final decodedHtml = jsonDecode(response.body); // ✅ IMPORTANT
+
+        setState(() {
+          _termsHtml = decodedHtml;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _error = "Failed to load terms & conditions";
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("🔥 Error loading terms: $e");
+      setState(() {
+        _error = "Something went wrong";
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const AppHeader(title: "Trerms & Conditions"),
+      appBar: const AppHeader(title: "Terms & Conditions"),
       backgroundColor: const Color(0xFFF2F2F2),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 10),
-            Text(
-              "Terms & Conditions",
-              style: TextStyle(
-                color: AppColors.primary,
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              "This Terms & Conditions are describes how this application collects, uses, and protects your information. By using this app, you agree to the collection and use of information in accordance with this policy.",
-              style: TextStyle(fontSize: 16, height: 1.5),
-            ),
-
-            const SizedBox(height: 20),
-            _buildSectionTitle("1. Camera Usage"),
-            const Text(
-              "This application uses your device's camera solely for the purpose of scanning QR codes. No images or video footage are recorded, saved, or transmitted to any server.",
-              style: TextStyle(fontSize: 16, height: 1.5),
-            ),
-
-            const SizedBox(height: 20),
-            _buildSectionTitle("2. GPS & Location Services"),
-            const Text(
-              "The app collects your GPS location only when required to store the location linked to scanned QR codes. Location data is stored securely and is never shared with third parties, except when explicitly required for app functionality.",
-              style: TextStyle(fontSize: 16, height: 1.5),
-            ),
-
-            const SizedBox(height: 20),
-            _buildSectionTitle("3. Data Storage & Security"),
-            const Text(
-              "We ensure that all collected data (locations, scanned records) is securely stored. We do not sell, trade, or share your data with any external parties.",
-              style: TextStyle(fontSize: 16, height: 1.5),
-            ),
-
-            const SizedBox(height: 20),
-            _buildSectionTitle("4. Third-Party Services"),
-            const Text(
-              "This application does not integrate with external analytics, tracking systems, or advertising networks. Your data remains fully private.",
-              style: TextStyle(fontSize: 16, height: 1.5),
-            ),
-
-            const SizedBox(height: 20),
-            _buildSectionTitle("5. User Consent"),
-            const Text(
-              "By using this application, you consent to the use of your device's camera and location services strictly for the intended functionalities.",
-              style: TextStyle(fontSize: 16, height: 1.5),
-            ),
-
-            const SizedBox(height: 20),
-            _buildSectionTitle("6. Changes to This Policy"),
-            const Text(
-              "We may update this Privacy Policy from time to time. You are advised to review this page periodically for any changes.",
-              style: TextStyle(fontSize: 16, height: 1.5),
-            ),
-
-            const SizedBox(height: 30),
-            const Text(
-              "If you have any questions regarding this Privacy Policy, please contact the support team.",
-              style: TextStyle(fontSize: 16, height: 1.5),
-            ),
-
-            const SizedBox(height: 60),
-          ],
-        ),
-      ),
+      body: _buildBody(),
       bottomNavigationBar: const AppFooter(currentIndex: 3),
     );
   }
 
-  static Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Text(
+          _error!,
+          style: const TextStyle(fontSize: 16, color: Colors.red),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Container(
+        color: Colors.white,
+        padding: const EdgeInsets.all(16),
+        child: Html(
+          data: _termsHtml!,
+          style: {
+            "h2": Style(
+              color: AppColors.primary,
+              fontSize: FontSize(22),
+              fontWeight: FontWeight.bold,
+            ),
+            "h3": Style(
+              fontSize: FontSize(18),
+              fontWeight: FontWeight.bold,
+            ),
+            "p": Style(
+              fontSize: FontSize(16),
+              lineHeight: LineHeight(1.5),
+            ),
+            "li": Style(
+              fontSize: FontSize(16),
+              lineHeight: LineHeight(1.5),
+            ),
+          },
         ),
       ),
     );

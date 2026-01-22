@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:foxscope/core/widgets/map.dart';
+import 'package:foxscope/features/auth/presentation/pages/forget_password_page.dart';
+import 'package:foxscope/features/auth/presentation/pages/signup_module/create_account.dart';
+import 'package:foxscope/features/auth/presentation/pages/signup_module/create_password.dart';
+import 'package:foxscope/features/auth/presentation/pages/signup_module/setup_profile.dart';
+import 'package:foxscope/features/auth/presentation/pages/verify_account_signin_page.dart';
+import 'package:foxscope/features/market/presentation/pages/paying_screen.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/pages/profile_module/change_email_address.dart';
@@ -7,12 +13,17 @@ import '../../features/auth/presentation/pages/profile_module/change_email_p2.da
 import '../../features/auth/presentation/pages/profile_module/change_password.dart';
 import '../../features/auth/presentation/pages/profile_module/change_password_p2.dart';
 import '../../features/auth/presentation/pages/profile_module/edit_profile.dart';
+import '../../features/auth/presentation/pages/signup_module/verify_account.dart';
+import '../../features/home/presentation/pages/qr_code_page.dart';
+import '../../features/market/presentation/pages/profile_market_place.dart';
 import '../../features/onboarding/presentation/pages/splash_page.dart';
 import '../../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/profile_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/discover/presentation/pages/discover_page.dart';
+import '../../features/scope/presentation/pages/edit_saved_scope.dart';
+import '../../features/scope/presentation/pages/edit_scope.dart';
 import '../../features/scope/presentation/pages/scope_page.dart';
 import '../../features/scope/presentation/pages/saved_page.dart';
 import '../../features/group/presentation/pages/group_page.dart';
@@ -30,10 +41,15 @@ import '../../features/settings/presentation/pages/policy_page.dart';
 import '../../features/settings/presentation/pages/terms_page.dart';
 import '../../features/settings/presentation/pages/help_page.dart';
 import '../../features/settings/presentation/pages/language_page.dart';
+import '../../main.dart';
+
 
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: '/',
+    observers: [
+      routeObserver,
+    ],
     routes: [
       GoRoute(
         path: '/',
@@ -54,8 +70,8 @@ class AppRouter {
       GoRoute(
         path: '/home',
         builder: (context, state) {
-          final userId = state.extra as int?;   // <-- allow null
-          return HomeScreen(userId: userId);   // <-- pass nullable
+          final userId = state.extra as String?;
+          return HomeScreen(userId: userId);
         },
       ),
       GoRoute(
@@ -63,8 +79,11 @@ class AppRouter {
         builder: (context, state) => const DiscoverPage(),
       ),
       GoRoute(
-        path: '/scope',
-        builder: (context, state) => const ScopePage(),
+        path: '/scopes',
+        builder: (context, state) {
+          final initialTab = state.extra as int? ?? 0;
+          return ScopePage(initialTabIndex: initialTab);
+        },
       ),
       GoRoute(
         path: '/scope-create',
@@ -73,10 +92,18 @@ class AppRouter {
           return CreateScopePage(selectedLocation: selectedLocation);
         },
       ),
+
       GoRoute(
         path: '/scope-map',
-        builder: (context, state) => const MapScopePage(),
+        builder: (context, state) {
+          final bool returnOnly = state.extra == true;
+
+          return MapScopePage(
+            returnLocationOnly: returnOnly,
+          );
+        },
       ),
+
       GoRoute(
         path: '/saved',
         builder: (context, state) => const SavedPage(),
@@ -96,14 +123,20 @@ class AppRouter {
       GoRoute(
         path: '/scan',
         builder: (context, state) => const ScanPage(),
-      ),     
+      ),
       GoRoute(
         path: '/market',
-        builder: (context, state) => const MarketPage(),
+        builder: (context, state) {
+          final initialTab = state.extra as int? ?? 0;
+          return MarketPage(initialTabIndex: initialTab);
+        },
       ),
       GoRoute(
         path: '/chat',
-        builder: (context, state) => const ChatPage(),
+        builder: (context, state) {
+          final initialIndex = state.extra as int? ?? 0; // 0 = chats, 1 = favourites
+          return ChatPage(initialTabIndex: initialIndex);
+        },
       ),
       GoRoute(
         path: '/notifications',
@@ -155,6 +188,76 @@ class AppRouter {
         path: '/changeEmailS2',
         builder: (context, state) => const ChangeEmailScreen2(),
       ),
+      GoRoute(
+        path: '/forgetPassword',
+        builder: (context, state) => const ForgetPasswordPage(),
+      ),
+      GoRoute(
+        path: '/verifyAccountSignIn',
+        builder: (context, state) => const VerifyAccountSignIn(),
+      ),
+      GoRoute(
+        path: '/setUpProfile',
+        builder: (context, state) => const SetupProfilePage(),
+      ),
+      GoRoute(
+        path: '/verifyAccountSignUp',
+        builder: (context, state) => const VerifyAccount(),
+      ),
+      GoRoute(
+        path: '/createPassword',
+        builder: (context, state) => const CreatePassword(),
+      ),
+      GoRoute(
+        path: '/createAccount',
+        builder: (context, state) => const CreateAccount(),
+      ),
+      GoRoute(
+        path: '/QrCodePage',
+        builder: (context, state) => const QrCodePage(),
+      ),
+      GoRoute(
+        path: '/ProfileMarketPlace',
+        builder: (context, state) => const ProfileCard(myItems: false,),
+      ),
+      // GoRoute(
+      //   path: '/PaymentGateway',
+      //   builder: (context, state) => const PaymentGateway(),
+      // ),
+      // GoRoute(
+      //   path: '/EditScope',
+      //   builder: (context, state) => const EditScope(),
+      // ),
+      GoRoute(
+        path: '/scope/:identifier/:id',
+        builder: (context, state) {
+          final identifier = state.pathParameters['identifier']!;
+          final id = state.pathParameters['id']!;
+
+          debugPrint('🧭 GoRouter matched /scope/$identifier');
+
+          return EditScope(
+            identifier: identifier, // ✅ STRING, NO PARSING
+            id: id,
+          );
+        },
+      ),
+
+
+
+      GoRoute(
+        path: '/savedScope/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id'];
+
+          debugPrint('🧭 GoRouter matched /scope/$id');
+
+          return EditSavedScope(
+            scopeId: int.parse(id!),
+          );
+        },
+      ),
+
 
     ],
   );

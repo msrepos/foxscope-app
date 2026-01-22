@@ -1,12 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+import '../../../../../core/constants/app_env.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/widgets/app_header.dart';
 import '../../../../../core/widgets/app_footer.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:country_icons/country_icons.dart';
+import '../../../../../core/widgets/widgets.dart';
 
 class EditProfile extends StatefulWidget {
   const EditProfile({super.key});
@@ -16,9 +20,139 @@ class EditProfile extends StatefulWidget {
 }
 
 class _EditProfileState extends State<EditProfile> {
+  //region Var========================
   File? _profileImage;
   final ImagePicker _picker = ImagePicker();
-  bool _hasImage = true; // Track if user has a profile image
+  final TextEditingController _firstNameCtrl = TextEditingController();
+  final TextEditingController _lastNameCtrl = TextEditingController();
+  final TextEditingController _usernameCtrl = TextEditingController();
+  final TextEditingController _descriptionCtrl = TextEditingController();
+  final TextEditingController _nationalityCtrl = TextEditingController();
+  String? _profileImageUrl;
+  DateTime? _birthDate;
+  String? _gender; // "male" | "female"
+  bool _isLoading = true;
+  bool _deletePicture = false;
+
+  //endregion
+
+  //region API=========================
+  Future<void> _fetchProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token");
+
+      if (token == null || token.isEmpty) {
+        debugPrint("❌ TOKEN IS NULL OR EMPTY");
+        Widgets.instant.showError(context, "Not authenticated");
+        return;
+      }
+
+      final url = "${AppEnv.apiBaseUrl}/foxscope/profile/details";
+      debugPrint("📡 GET PROFILE → $url");
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Accept": "application/json",
+        },
+      );
+
+      debugPrint("📥 STATUS: ${response.statusCode}");
+      debugPrint("📦 BODY: ${response.body}");
+
+      if (response.statusCode != 200) {
+        Widgets.instant.showError(
+          context,
+          "Failed to load profile (${response.statusCode})",
+        );
+        return;
+      }
+
+      final data = jsonDecode(response.body);
+
+      if (!mounted) return;
+
+      setState(() {
+        _firstNameCtrl.text = data["first_name"] ?? "";
+        _lastNameCtrl.text = data["last_name"] ?? "";
+        _usernameCtrl.text = data["uuid"] ?? "";
+        _descriptionCtrl.text = data["description"] ?? "";
+        _nationalityCtrl.text = data["nationality"] ?? "";
+        _gender = data["gender"];
+
+        if (data["birth_date"] != null) {
+          _birthDate = DateTime.parse(data["birth_date"]);
+        }
+
+
+        _profileImageUrl = data["image"];
+        _isLoading = false;
+      });
+    } catch (e, stack) {
+      debugPrint("🔥 FETCH PROFILE ERROR: $e");
+      debugPrint("📛 STACK: $stack");
+
+      Widgets.instant.showError(context, "Failed to load profile");
+    }
+  }
+
+  Future<void> _updateProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("token");
+
+      final request = http.MultipartRequest(
+        "POST",
+        Uri.parse("${AppEnv.apiBaseUrl}/foxscope/profile/update"),
+      );
+
+      request.headers.addAll({
+        "Authorization": "Bearer $token",
+        "Accept": "application/json",
+      });
+
+      request.fields["data"] = jsonEncode({
+        "first_name": _firstNameCtrl.text.trim(),
+        "last_name": _lastNameCtrl.text.trim(),
+        "description": _descriptionCtrl.text.trim(),
+        "nationality": _nationalityCtrl.text.trim(),
+        "gender": _gender,
+        "birth_date": _birthDate?.millisecondsSinceEpoch,
+        "delete_picture": _deletePicture,
+      });
+
+      if (_profileImage != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            "image",
+            _profileImage!.path,
+          ),
+        );
+      }
+
+      final response = await request.send();
+      final body = await response.stream.bytesToString();
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        //Widgets.instant.showSuccess(context, "Profile updated");
+        context.go("/home");
+      } else {
+        Widgets.instant.showError(context, body);
+      }
+    } catch (e) {
+      Widgets.instant.showError(context, "Update failed");
+    }
+  }
+
+  //endregion
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchProfile();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +172,9 @@ class _EditProfileState extends State<EditProfile> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(15, 10, 15, 10),
                 child: TextField(
+                  controller: _firstNameCtrl,
                   decoration: InputDecoration(
+
                     labelText: 'First Name',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
@@ -49,6 +185,8 @@ class _EditProfileState extends State<EditProfile> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(15, 5, 15, 10),
                 child: TextField(
+                  controller: _lastNameCtrl,
+
                   decoration: InputDecoration(
                     labelText: 'Last Name',
                     border: OutlineInputBorder(
@@ -60,6 +198,8 @@ class _EditProfileState extends State<EditProfile> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(15, 5, 15, 10),
                 child: TextField(
+                  controller: _usernameCtrl,
+
                   decoration: InputDecoration(
                     labelText: 'User Name',
                     border: OutlineInputBorder(
@@ -69,13 +209,82 @@ class _EditProfileState extends State<EditProfile> {
                 ),
               ),
               Padding(
+                padding: const EdgeInsets.fromLTRB(15, 5, 15, 10),
+                child: TextField(
+                  controller: _descriptionCtrl,
+                  maxLines: 1,
+                  decoration: InputDecoration(
+                    labelText: "Description",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(15, 5, 15, 10),
+                child: TextField(
+                  controller: _nationalityCtrl,
+                  decoration: InputDecoration(
+                    labelText: "Nationality",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(15, 5, 15, 10),
+                child: GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _birthDate ?? DateTime(2000),
+                      firstDate: DateTime(1900),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setState(() => _birthDate = picked);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: "Birth Date",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    child: Text(
+                      _birthDate == null
+                          ? "Select date"
+                          : "${_birthDate!.day}/${_birthDate!.month}/${_birthDate!.year}",
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(15, 5, 15, 10),
+                child: DropdownButtonFormField<String>(
+                  value: _gender,
+                  decoration: InputDecoration(
+                    labelText: "Gender",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: "male", child: Text("Male")),
+                    DropdownMenuItem(value: "female", child: Text("Female")),
+                  ],
+                  onChanged: (v) => setState(() => _gender = v),
+                ),
+              ),
+              Padding(
                 padding: const EdgeInsets.fromLTRB(15, 5, 15, 20),
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      context.go('/home');
-                    },
+                    onPressed: _updateProfile,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -110,7 +319,8 @@ class _EditProfileState extends State<EditProfile> {
           child: Wrap(
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_camera, color: AppColors.primary),
+                leading:
+                    const Icon(Icons.photo_camera, color: AppColors.primary),
                 title: const Text('Take Photo'),
                 onTap: () {
                   Navigator.pop(context);
@@ -118,7 +328,8 @@ class _EditProfileState extends State<EditProfile> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library, color: AppColors.primary),
+                leading:
+                    const Icon(Icons.photo_library, color: AppColors.primary),
                 title: const Text('Choose from Gallery'),
                 onTap: () {
                   Navigator.pop(context);
@@ -149,7 +360,6 @@ class _EditProfileState extends State<EditProfile> {
       if (pickedFile != null) {
         setState(() {
           _profileImage = File(pickedFile.path);
-          _hasImage = true;
         });
 
         // Show success message
@@ -211,22 +421,18 @@ class _EditProfileState extends State<EditProfile> {
                 child: SizedBox(
                   width: 260,
                   height: 260, // whatever size you like
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(130),
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 3.0,
-                      child: _profileImage != null
-                          ? Image.file(
-                        _profileImage!,
-                        fit: BoxFit.cover,
-                      )
-                          : Image.asset(
-                        'assets/images/profile_sample.png',
-                        fit: BoxFit.cover,
-                      ),
-                    ),
+                  child: CircleAvatar(
+                    radius: 80,
+                    backgroundColor: Colors.grey[300],
+                    backgroundImage: _profileImage != null
+                        ? FileImage(_profileImage!)
+                        : _profileImageUrl != null
+                        ? NetworkImage(_profileImageUrl!)
+                        : const AssetImage('assets/images/profile_sample.png')
+                    as ImageProvider,
                   ),
+
+
                 ),
               ),
 
@@ -237,7 +443,6 @@ class _EditProfileState extends State<EditProfile> {
       },
     );
   }
-
 
   void _deletePhoto() {
     showDialog(
@@ -264,7 +469,6 @@ class _EditProfileState extends State<EditProfile> {
               onPressed: () {
                 setState(() {
                   _profileImage = null;
-                  _hasImage = false;
                 });
                 Navigator.pop(context);
 
@@ -365,7 +569,7 @@ class _EditProfileState extends State<EditProfile> {
 
   Widget _buildProfileBox() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
@@ -379,21 +583,27 @@ class _EditProfileState extends State<EditProfile> {
               SizedBox(
                 width: 160,
                 height: 160,
-                child: CircleAvatar(
-                  radius: 80,
-                  backgroundImage: _profileImage != null
-                      ? FileImage(_profileImage!) as ImageProvider
-                      : _hasImage
-                      ? const AssetImage('assets/images/profile_sample.png')
-                      : null,
-                  backgroundColor: Colors.grey[300],
-                  child: !_hasImage && _profileImage == null
-                      ? const Icon(
-                    Icons.person,
-                    size: 80,
-                    color: Colors.grey,
-                  )
-                      : null,
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.orange, // The color of the border
+                      width: 3.0, // The thickness of the border
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(0.0),
+                  child:CircleAvatar(
+                    radius: 80,
+                    backgroundColor: Colors.grey[300],
+                    backgroundImage: _profileImage != null
+                        ? FileImage(_profileImage!)
+                        : _profileImageUrl != null
+                        ? NetworkImage(_profileImageUrl!)
+                        : const AssetImage(
+                      'assets/images/profile_sample.png',
+                    ) as ImageProvider,
+                  ),
+
                 ),
               ),
               Positioned(

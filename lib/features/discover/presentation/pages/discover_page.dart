@@ -17,6 +17,7 @@ class DiscoverPage extends StatefulWidget {
 
 class _DiscoverPageState extends BaseMapState<DiscoverPage> {
   List<Scope>? scopes;
+  final Set<String> _addedMarkerIds = {};
 
   @override
   Widget mapContainer(Widget map) {
@@ -35,7 +36,7 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
             left: 16,
             right: 16,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               height: 50,
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -50,30 +51,53 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.search, color: Colors.grey),
-                  SizedBox(width: 10),
+                  const Icon(Icons.search, color: Colors.grey),
+                  const SizedBox(width: 10),
+
+                  /// Search field
                   Expanded(
                     child: TextField(
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         hintText: "Search locations...",
                         border: InputBorder.none,
                         hintStyle: TextStyle(color: Colors.grey, fontSize: 16),
                       ),
-                      style: TextStyle(fontSize: 16),
+                      style: const TextStyle(fontSize: 16),
                       onChanged: onSearchTextChanged,
                     ),
                   ),
 
-                  //todo may remove
+                  /// Optional list icon
                   if (scopes?.isNotEmpty == true)
                     GestureDetector(
                       onTap: showScopesList,
-                      child: Icon(Icons.list, color: Colors.grey),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Icon(Icons.list, color: Colors.grey),
+                      ),
                     ),
+
+                  /// Divider
+                  Container(
+                    width: 1,
+                    height: 24,
+                    color: Colors.grey.shade300,
+                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+
+                  /// ✅ Filter icon (CLICKABLE)
+                  GestureDetector(
+                    onTap: onFilterTapped,
+                    child: const Icon(
+                      Icons.filter_list,
+                      color: Colors.grey,
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
+
 
           // Search result
           if (searchText.isNotEmpty && scopes?.isNotEmpty == true)
@@ -119,6 +143,16 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
       ),
     );
   }
+
+  void onFilterTapped() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const FilterBottomSheet(),
+    );
+  }
+
 
   //---------------------------------------------------------------------------
 
@@ -215,48 +249,56 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
     bool useCards = true,
     required VoidCallback onTap,
   }) {
-    Widget container(Widget child) => useCards
-        ? Card(
-            surfaceTintColor: Colors.white60,
-            child: child,
-          )
-        : child;
+    Widget content = Padding(
+      padding: const EdgeInsets.all(10.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            scope.code ?? "",
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[400],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            scope.name ?? "",
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            scope.note ?? "",
+            style: const TextStyle(
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
 
     return SizedBox(
-      width: double.maxFinite,
-      child: GestureDetector(
-        onTap: onTap,
-        child: container(Padding(
-          padding: const EdgeInsets.all(10.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                scope.code ?? "",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[400],
-                ),
-              ),
-              Text(
-                scope.name ?? "",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
-              ),
-              Text(
-                scope.note ?? "",
-                style: TextStyle(
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        )),
+      width: double.infinity,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: useCards
+              ? Card(
+            surfaceTintColor: Colors.white,
+            elevation: 1,
+            child: content,
+          )
+              : content,
+        ),
       ),
     );
   }
+
 
   void onScopeTapped(Scope scope, {VoidCallback? close}) {
     if (close == null) Navigator.pop(context);
@@ -282,173 +324,401 @@ class _DiscoverPageState extends BaseMapState<DiscoverPage> {
 
   @override
   void onLocationDropped(GeoLocation location) {
+    debugPrint("📍 Location dropped: ${location.lat}, ${location.lng}");
     lastReceivedLocation = location;
     fetchScopes(location);
   }
 
   Future<List<Scope>?> fetchScopes(GeoLocation location) async {
-    var scopesRes = await ScopesRepository().fetchScopes();
-    scopes = scopesRes.result;
+    debugPrint("🟡 FETCH SCOPES START");
+    debugPrint("📍 User location: ${location.lat}, ${location.lng}");
 
-    if (!mounted) return scopes;
+    final scopesRes = await ScopesRepository().fetchScopes();
 
-    setState(() {});
+    if (!mounted) return null;
 
-    if (scopesRes.result != null) {
-      for (var scope in scopesRes.result!) {
-        var lat = double.tryParse("${scope.lat}");
-        var lng = double.tryParse("${scope.lng}");
+    final result = scopesRes.result;
 
-        if (lat != null && lng != null) {
-          mapState?.addCustomMarker(
-            markerId: "${scope.id}",
-            position: LatLng(lat, lng),
-            title: scope.name ?? "Scope X",
-            snippet: scope.note,
-            //onTap: null,
-            onTap: () => viewScopeInfo(scope),
-          );
-        }
-      }
+    if (result == null || result.isEmpty) {
+      debugPrint("❌ API returned NO scopes");
+      setState(() => scopes = []);
+      return [];
     }
-    //
-    else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(scopesRes.message?.get(true) ?? "No scopes found"),
-          backgroundColor: Colors.red,
-        ),
+
+    debugPrint("✅ ${result.length} scopes received");
+
+    final validScopes = <Scope>[];
+
+    for (final scope in result) {
+      final lat = _parseDouble(scope.lat);
+      final lng = _parseDouble(scope.lng);
+
+      if (lat == null || lng == null) {
+        debugPrint("⚠️ Invalid coordinates for scope ${scope.id}");
+        continue;
+      }
+
+      final markerId = scope.id.toString();
+
+      // 🔒 Prevent duplicate markers
+      if (_addedMarkerIds.contains(markerId)) {
+        continue;
+      }
+
+      _addedMarkerIds.add(markerId);
+      validScopes.add(scope);
+
+      debugPrint("📌 Adding marker for scope ${scope.id}");
+
+      mapState?.addCustomMarker(
+        markerId: markerId,
+        position: LatLng(lat, lng),
+        title: scope.name ?? "Scope",
+        snippet: scope.note,
+        onTap: () => viewScopeInfo(scope),
       );
     }
 
-    return scopes;
+    setState(() {
+      scopes = validScopes;
+    });
+
+    return validScopes;
+  }
+
+  double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    return double.tryParse(value.toString());
   }
 
   void viewScopeInfo(Scope scope) {
-    final imageHeight = 100.0;
-
     showDialog(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.4),
       builder: (context) {
-        return Column(
-          children: [
-            Expanded(child: SizedBox()),
-            Material(
-              color: Colors.transparent,
-              child: Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(15),
-                      color: Colors.white,
-                    ),
-                    padding: EdgeInsets.all(10),
-                    margin: EdgeInsets.only(
-                      top: imageHeight / 2,
-                      left: 15,
-                      right: 15,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(height: imageHeight / 2),
-                        Center(
-                          child: Text(
-                            scope.name ?? "",
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 10),
-                        Row(
-                          children: [
-                            ...[
-                              (
-                                Icons.pin_drop_outlined,
-                                "Location",
-                                scope.countryCode,
-                              ),
-                              (
-                                Icons.remove_red_eye_outlined,
-                                "Views",
-                                scope.views ?? "0",
-                              ),
-                              //todo what is the value of 'saved'?
-                              (
-                                Icons.save_outlined,
-                                "Saved",
-                                "0",
-                              ),
-                            ].map((e) => Expanded(
-                                  child: Column(
-                                    children: [
-                                      Icon(e.$1),
-                                      Text(
-                                        e.$2,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                      Text(
-                                        e.$3,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ))
-                          ]
-                            ..insert(
-                                1,
-                                Container(
-                                  width: 1,
-                                  height: 50,
-                                  color: Colors.grey[300],
-                                ))
-                            ..insert(
-                                3,
-                                Container(
-                                  width: 1,
-                                  height: 50,
-                                  color: Colors.grey[300],
-                                )),
-                        ),
-                      ],
-                    ),
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.topCenter,
+              children: [
+                // Main card
+                Container(
+                  width: MediaQuery.of(context).size.width - 40,
+                  padding: const EdgeInsets.fromLTRB(16, 60, 16, 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
                   ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Scope name
+                      Text(
+                        scope.name ?? "",
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
 
-                  //photo
-                  Align(
-                    alignment: Alignment.topCenter,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
+                      // Stats row
+                      Row(
+                        children: [
+                          _infoItem(
+                            Icons.location_on_outlined,
+                            "Location",
+                            scope.countryCode ?? "—",
+                          ),
+                          _divider(),
+                          _infoItem(
+                            Icons.remove_red_eye_outlined,
+                            "Views",
+                            "${scope.views ?? 0}",
+                          ),
+                          _divider(),
+                          _infoItem(
+                            Icons.bookmark_outline,
+                            "Saved",
+                            "2", // TODO: replace with real value
+                          ),
+                        ],
                       ),
-                      height: imageHeight,
-                      width: imageHeight,
-                      clipBehavior: Clip.antiAlias,
-                      child: Image.asset(
-                        //todo replace with Image.network
-                        'assets/images/mostafa.png',
-                        width: imageHeight,
-                        height: imageHeight,
-                      ),
+                    ],
+                  ),
+                ),
+
+                // Floating image
+                Positioned(
+                  top: -40,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.asset(
+                      'assets/images/mostafa.png', // TODO replace with network
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Expanded(child: SizedBox()),
-          ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _infoItem(IconData icon, String title, String value) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: AppColors.primary),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _divider() {
+    return Container(
+      width: 1,
+      height: 40,
+      color: Colors.grey.shade300,
+    );
+  }
+
+
+}
+
+//================================================
+
+class FilterBottomSheet extends StatefulWidget {
+  const FilterBottomSheet({super.key});
+
+  @override
+  State<FilterBottomSheet> createState() => _FilterBottomSheetState();
+}
+
+class _FilterBottomSheetState extends State<FilterBottomSheet> {
+  final Map<String, String?> selectedValues = {};
+  final Map<String, bool> expandedSections = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.9,
+      maxChildSize: 0.95,
+      minChildSize: 0.6,
+      builder: (_, controller) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+
+              /// Drag handle
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              /// Title
+              const Text(
+                "Filters",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+
+              const SizedBox(height: 12),
+
+              /// Search
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: "Search",
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              /// Content
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    _section(
+                      title: "Education",
+                      items: ["University", "School", "Library"],
+                    ),
+                    _section(
+                      title: "Health & Safety",
+                      items: [
+                        "Hospital",
+                        "Clinic",
+                        "Pharmacy",
+                        "Police Station",
+                        "Fire Station"
+                      ],
+                    ),
+                    _section(
+                      title: "Government & Services",
+                      items: [
+                        "Government Office",
+                        "Post Office",
+                        "Embassy"
+                      ],
+                    ),
+                    _section(
+                      title: "Transportation",
+                      items: [
+                        "Train Station",
+                        "Bus Station",
+                        "Gas Station",
+                        "Airport"
+                      ],
+                    ),
+                    _section(
+                      title: "Shopping & Dining",
+                      items: ["Supermarket", "Mall", "Restaurant", "Cafe"],
+                    ),
+                    _section(
+                      title: "Accommodation & Events",
+                      items: ["Hotel", "Conference Center"],
+                    ),
+                    _section(
+                      title: "Recreation & Entertainment",
+                      items: [
+                        "Zoo",
+                        "Theater",
+                        "Stadium",
+                        "Cinema",
+                        "Park",
+                        "Museum",
+                        "Beach"
+                      ],
+                    ),
+                    _section(
+                      title: "Finance",
+                      items: ["Bank"],
+                    ),
+                  ],
+                ),
+              ),
+
+              /// Save button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16,16,16,40),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      debugPrint("✅ Filters saved: $selectedValues");
+                    },
+                    child: const Text(
+                      "Save",
+                      style: TextStyle(fontSize: 16,color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Expandable section
+  Widget _section({
+    required String title,
+    required List<String> items,
+  }) {
+    final isExpanded = expandedSections[title] ?? false;
+
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        children: [
+          ListTile(
+            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+            trailing: Icon(isExpanded
+                ? Icons.keyboard_arrow_up
+                : Icons.keyboard_arrow_down),
+            onTap: () {
+              setState(() {
+                expandedSections[title] = !isExpanded;
+              });
+            },
+          ),
+
+          if (isExpanded)
+            Column(
+              children: items.map((item) {
+                return RadioListTile<String>(
+                  value: item,
+                  groupValue: selectedValues[title],
+                  title: Text(item),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedValues[title] = value;
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+        ],
+      ),
     );
   }
 }

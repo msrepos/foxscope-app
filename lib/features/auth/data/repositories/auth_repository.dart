@@ -16,6 +16,54 @@ class AuthRepository {
   }) async {
     final url = Uri.parse("${AppEnv.apiBaseUrl}/login");
 
+    // try {
+    //   final response = await http.post(
+    //     url,
+    //     headers: {"Content-Type": "application/json"},
+    //     body: jsonEncode({
+    //       "email": username.trim(),
+    //       "password": password.trim(),
+    //     }),
+    //   );
+    //
+    //   print("STATUS CODE: ${response.statusCode}");
+    //   print("RAW BODY: '${response.body}'");
+    //
+    //   final data = jsonDecode(response.body);
+    //
+    //   if (response.statusCode == 200 && data["token"] != null) {
+    //     final token = data["token"];
+    //     final userId = data["user"]["id"];
+    //
+    //     final prefs = await SharedPreferences.getInstance();
+    //     prefs.setString('user_name', data['user']['name']);
+    //     prefs.setString('token', token);
+    //
+    //     final user = UserMapper().fromMap({
+    //       'token': token,
+    //       'userId': userId,
+    //       'userName': data['user']['name'],
+    //     });
+    //     (userStorage ?? AccountStorage(UserMapper())).saveAccount(
+    //       user,
+    //       username.trim(),
+    //       password.trim(),
+    //     );
+    //     //.saveUserNameAndPassword(username.trim(), password.trim(),);
+    //
+    //     return Result(user);
+    //   }
+    //   else {
+    //     return Result(
+    //       null,
+    //       message: StringSet(data["message"] ?? "Login failed"),
+    //     );
+    //   }
+    //
+    // } catch (e) {
+    //   return Result(null, message: StringSet("Error: $e"));
+    // }
+
     try {
       final response = await http.post(
         url,
@@ -25,6 +73,16 @@ class AuthRepository {
           "password": password.trim(),
         }),
       );
+
+      print("STATUS CODE: ${response.statusCode}");
+      print("RAW BODY: '${response.body}'");
+
+      if (response.body.isEmpty) {
+        return Result(
+          null,
+          message: StringSet("Empty response from server"),
+        );
+      }
 
       final data = jsonDecode(response.body);
 
@@ -49,9 +107,7 @@ class AuthRepository {
         //.saveUserNameAndPassword(username.trim(), password.trim(),);
 
         return Result(user);
-      }
-      //
-      else {
+      } else {
         return Result(
           null,
           message: StringSet(data["message"] ?? "Login failed"),

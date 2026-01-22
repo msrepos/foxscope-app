@@ -4,11 +4,13 @@ import 'core/theme/app_colors.dart';
 import 'core/di/service_locator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await setupLocator(); // register dependencies
   await dotenv.load(fileName: ".env");
+
   runApp(const FoxScopeApp());
 }
 
@@ -25,6 +27,7 @@ class FoxScopeApp extends StatelessWidget {
         fontFamily: 'Roboto',
       ),
       routerConfig: AppRouter.router,
+
     );
   }
 }

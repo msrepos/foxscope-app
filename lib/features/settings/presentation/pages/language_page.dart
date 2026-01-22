@@ -71,7 +71,7 @@ class _LanguagePageState extends State<LanguagePage> {
             });
           },
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 25),
             child: Row(
               children: [
                 SvgPicture.asset(
@@ -106,7 +106,7 @@ class _LanguagePageState extends State<LanguagePage> {
         ),
         if (!isLast)
           Padding(
-            padding: const EdgeInsets.only(left: 20, right: 20),
+            padding: const EdgeInsets.only(left: 30, right: 30),
             child: Container(height: 1, color: Colors.grey.shade300),
           ),
       ],

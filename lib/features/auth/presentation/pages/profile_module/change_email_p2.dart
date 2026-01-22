@@ -1,10 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/widgets/app_header.dart';
 import '../../../../../core/widgets/app_footer.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:country_icons/country_icons.dart';
+
+import '../../../../../core/widgets/widgets.dart';
 
 class ChangeEmailScreen2 extends StatefulWidget {
   const ChangeEmailScreen2({super.key});
@@ -14,6 +20,78 @@ class ChangeEmailScreen2 extends StatefulWidget {
 }
 
 class _ChangeEmailScreen2State extends State<ChangeEmailScreen2> {
+  final TextEditingController _otpController = TextEditingController();
+  bool _isLoading = false;
+
+
+  Future<void> _changeEmailSecondStep() async {
+    debugPrint("🔵 [ChangeEmailStep2] started");
+
+    final code = _otpController.text.trim();
+    if (code.isEmpty) {
+      Widgets.instant.showError(context,"Enter OTP");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final email = prefs.getString('pending_email');
+
+      if (token == null || email == null) {
+        Widgets.instant.showError(context,"Session expired");
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse(
+          "https://api.foxscope.com/foxscope/profile/change_email_second_step",
+        ),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode({
+          "email": email,
+          "code": code,
+        }),
+      );
+
+      debugPrint("📡 Status: ${response.statusCode}");
+      debugPrint("📨 Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        if (!mounted) return;
+
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => Widgets.instant.buildSuccessPopup(
+            'Email changed successfully',
+          ),
+        );
+
+        await Future.delayed(const Duration(seconds: 2));
+
+        if (mounted) {
+          Navigator.pop(context); // popup
+          Navigator.pop(context); // screen
+          Navigator.pop(context); // profile
+        }
+      } else {
+        Widgets.instant.showError(context,"Invalid code");
+      }
+    } catch (e) {
+      debugPrint("🔥 Error: $e");
+      Widgets.instant.showError(context,"Something went wrong");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -30,7 +108,9 @@ class _ChangeEmailScreen2State extends State<ChangeEmailScreen2> {
             children: [
               Padding(
                 padding: EdgeInsetsGeometry.fromLTRB(15, 10, 15, 10),
-                child: TextField(
+                child:TextField(
+                  controller: _otpController,
+                  keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: 'Enter OTP',
                     border: OutlineInputBorder(
@@ -38,20 +118,20 @@ class _ChangeEmailScreen2State extends State<ChangeEmailScreen2> {
                     ),
                   ),
                 ),
+
               ),
               Padding(
                 padding: EdgeInsetsGeometry.fromLTRB(15, 5, 15, 10),
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        barrierDismissible: true,
-                        barrierColor: Colors.black.withOpacity(0.3),
-                        builder: (_) => buildSuccessPopup('Email changed '),
-                      );
-                    },
+                    onPressed: _isLoading ? null : _changeEmailSecondStep,
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                      'Confirm Email Change',
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -59,30 +139,29 @@ class _ChangeEmailScreen2State extends State<ChangeEmailScreen2> {
                         borderRadius: BorderRadius.circular(6),
                       ),
                     ),
-                    child: const Text(
-                      'Change Password',
-                      style: TextStyle(fontSize: 16, color: Colors.white),
-                    ),
+
                   ),
                 ),
               ),
-              Padding(
-                padding: EdgeInsetsGeometry.fromLTRB(15, 0, 15, 10),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: Center(
-                    child: TextButton(
-                      onPressed: () {
-                        // handle email code
-                      },
-                      child: const Text(
-                        'Resend Email Code',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+
+              //todo there is no api for it
+              // Padding(
+              //   padding: EdgeInsetsGeometry.fromLTRB(15, 0, 15, 10),
+              //   child: SizedBox(
+              //     width: double.infinity,
+              //     child: Center(
+              //       child: TextButton(
+              //         onPressed: () {
+              //           // handle email code
+              //         },
+              //         child: const Text(
+              //           'Resend Email Code',
+              //           style: TextStyle(color: Colors.grey),
+              //         ),
+              //       ),
+              //     ),
+              //   ),
+              // ),
             ],
           ),
         ),
@@ -90,58 +169,5 @@ class _ChangeEmailScreen2State extends State<ChangeEmailScreen2> {
       bottomNavigationBar: const AppFooter(currentIndex: 3),
     );
   }
-
-
-  Widget buildSuccessPopup(String message) {
-    return Center(
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 32),
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF4CAF50), // green circle
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-
 
 }
